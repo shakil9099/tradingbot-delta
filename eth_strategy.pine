@@ -1,0 +1,258 @@
+//@version=6
+// ⚠ OUT OF DATE (2026-11-09): this script still uses the ORIGINAL $20 / +12 / +25 / trail 10 / TP 100 exits.
+// The bot now runs Strategy v2 (ATR stop, break-even, ATR trailing, no TP, risk sizing — design Amendment A).
+// The bot does not depend on this file; use it only to view the Hull / UT signals on a chart.
+// ETH Hull / UT Bot adaptive strategy — mirrors tradingbot-eth (src/core/*). The TypeScript code is the
+// reference; this script is an approximate visual/backtest check (TradingView's broker emulator fills
+// intrabar orders by its own rules). Results are per 1 ETH. bot.pine is unchanged.
+strategy("ETH Hull/UT Adaptive (tradingbot-eth)", shorttitle = "ETH Bot", overlay = true,
+     initial_capital = 10000, default_qty_type = strategy.fixed, default_qty_value = 1,
+     commission_type = strategy.commission.percent, commission_value = 0.059, slippage = 1,
+     margin_long = 5, margin_short = 5, pyramiding = 0,
+     process_orders_on_close = false, calc_on_every_tick = false, max_labels_count = 500)
+
+// ---------------- Inputs (comment = params.ts key) ----------------
+mode      = input.string("Adaptive", "Mode", options = ["Adaptive", "Hull only", "UT only"], group = "Strategy") // STRATEGY
+hullLen   = input.int(55, "Hull length", minval = 4, group = "Hull") // HULL_LEN
+utKey     = input.float(2.0, "UT key value", step = 0.1, group = "UT Bot") // UT_KEY
+utAtr     = input.int(6, "UT ATR period", minval = 1, group = "UT Bot") // UT_ATR
+slDist    = input.float(20, "Initial stop-loss ($)", group = "Exits") // SL_DIST
+tpDist    = input.float(100, "Take-profit ($)", group = "Exits") // TP_DIST
+s1Trig    = input.float(12, "Stage 1 trigger ($ profit)", group = "Exits") // S1_TRIGGER
+s1Lock    = input.float(2.5, "Stage 1 lock ($)", group = "Exits") // S1_LOCK
+s2Trig    = input.float(25, "Stage 2 trigger ($ profit)", group = "Exits") // S2_TRIGGER
+s2Lock    = input.float(15, "Stage 2 lock ($)", group = "Exits") // S2_LOCK
+trailGap  = input.float(10, "Trail gap ($)", group = "Exits") // TRAIL_GAP
+selN      = input.int(10, "Selector: last N trades", minval = 1, group = "Selector") // SEL_N
+selMargin = input.float(20, "Selector: switch margin ($)", group = "Selector") // SEL_MARGIN
+warmup    = input.int(200, "Warm-up bars", minval = 0, group = "Selector") // WARMUP
+atrGateMax = input.float(0, "Volatility gate: max ATR(14) for entries (0 = off)", group = "Filters") // ATR_GATE_MAX
+skipWeekend = input.bool(true, "No new entries on Sat/Sun (IST)", group = "Filters") // SKIP_WEEKEND_ENTRIES
+feeRate   = input.float(0.00059, "Fee rate per side (virtual P&L)", group = "Selector") // FEE_RATE
+
+tick = syminfo.mintick
+slip = 1 * tick // SLIPPAGE_TICKS
+eps  = 1e-9
+
+roundUp(float x) => math.ceil(math.round(x / tick, 6)) * tick
+roundDown(float x) => math.floor(math.round(x / tick, 6)) * tick
+roundNear(float x) => math.round(math.round(x / tick, 6)) * tick
+
+// ---------------- Indicators (parity spec) ----------------
+half = math.floor(hullLen / 2)
+sq   = math.round(math.sqrt(hullLen))
+hull = ta.wma(2 * ta.wma(close, half) - ta.wma(close, hullLen), sq)
+validHull = not na(hull) and not na(hull[1]) and not na(hull[2]) and not na(hull[3])
+hullUp = not na(hull) and not na(hull[2]) and hull > hull[2]
+hullUpPrev = not na(hull[1]) and not na(hull[3]) and hull[1] > hull[3]
+int hullSig = validHull ? (hullUp and not hullUpPrev ? 1 : (not hullUp and hullUpPrev) ? -1 : 0) : 0
+
+xATR  = ta.atr(utAtr)
+nLoss = utKey * xATR
+var float utStop = 0.0
+float prevStop = nz(utStop[1], 0)
+utStop := close > prevStop and close[1] > prevStop ? math.max(prevStop, close - nLoss) : close < prevStop and close[1] < prevStop ? math.min(prevStop, close + nLoss) : close > prevStop ? close - nLoss : close + nLoss
+bool utValid = not na(utStop) and not na(utStop[1]) and not na(close[1])
+int utSig = utValid ? (close > utStop and close[1] <= utStop[1] ? 1 : close < utStop and close[1] >= utStop[1] ? -1 : 0) : 0
+
+if bar_index < warmup
+    hullSig := 0
+    utSig := 0
+
+atrGate = ta.atr(14)
+// The entry fills at the next bar's open = this bar's close time, so the weekend check uses time_close.
+int fillDay = dayofweek(time_close, "Asia/Kolkata")
+bool weekendIst = fillDay == dayofweek.saturday or fillDay == dayofweek.sunday
+bool allowEntry = (atrGateMax <= 0 or (not na(atrGate) and atrGate <= atrGateMax)) and not (skipWeekend and weekendIst)
+
+// ---------------- Ratchet (same table as src/core/ratchet.ts) ----------------
+stageOf(int side, float entry, float sl) =>
+    int st = 2
+    if side == 1
+        st := sl < entry + s1Lock - eps ? 0 : sl < entry + s2Lock - eps ? 1 : 2
+    else
+        st := sl > entry - s1Lock + eps ? 0 : sl > entry - s2Lock + eps ? 1 : 2
+    st
+
+nextStop(int side, float entry, float sl, float c) =>
+    float p = side == 1 ? c - entry : entry - c
+    float cand = na
+    if p >= s2Trig - eps
+        cand := side == 1 ? math.max(entry + s2Lock, c - trailGap) : math.min(entry - s2Lock, c + trailGap)
+    else if p >= s1Trig - eps
+        cand := side == 1 ? entry + s1Lock : entry - s1Lock
+    float out = sl
+    if not na(cand)
+        float r = side == 1 ? roundUp(cand) : roundDown(cand)
+        float n = side == 1 ? math.max(sl, r) : math.min(sl, r)
+        if math.abs(n - sl) >= tick - eps
+            out := n
+    out
+
+// ---------------- Virtual per-strategy positions (adaptive scores) ----------------
+type VPos
+    int side = 0
+    float entry = na
+    float sl = na
+    float tp = na
+    int pend = 0      // 0 none, 1 enter, 2 reverse, 3 close only
+    int pendSide = 0
+    int count = 0
+    array<float> pnl
+
+method vOpen(VPos v, int side, float px) =>
+    v.side := side
+    v.entry := side == 1 ? px + slip : px - slip
+    v.sl := side == 1 ? roundUp(v.entry - slDist) : roundDown(v.entry + slDist)
+    v.tp := roundNear(side == 1 ? v.entry + tpDist : v.entry - tpDist)
+
+method vClose(VPos v, float px) =>
+    float exitPx = v.side == 1 ? px - slip : px + slip
+    float gross = v.side == 1 ? exitPx - v.entry : v.entry - exitPx
+    v.pnl.push(gross - (v.entry + exitPx) * feeRate)
+    if v.pnl.size() > selN
+        v.pnl.shift()
+    v.count += 1
+    v.side := 0
+
+method vBar(VPos v, int sig) =>
+    // 1. pending order at this bar's open
+    if v.pend == 3 and v.side != 0
+        v.vClose(open)
+    else if v.pend == 2
+        if v.side != 0
+            v.vClose(open)
+        v.vOpen(v.pendSide, open)
+    else if v.pend == 1 and v.side == 0
+        v.vOpen(v.pendSide, open)
+    v.pend := 0
+    // 2. SL first, then TP, gap fills at the open; else ratchet on close
+    if v.side == 1
+        if low <= v.sl
+            v.vClose(open <= v.sl ? open : v.sl)
+        else if high >= v.tp
+            v.vClose(open >= v.tp ? open : v.tp)
+        else
+            v.sl := nextStop(1, v.entry, v.sl, close)
+    else if v.side == -1
+        if high >= v.sl
+            v.vClose(open >= v.sl ? open : v.sl)
+        else if low <= v.tp
+            v.vClose(open <= v.tp ? open : v.tp)
+        else
+            v.sl := nextStop(-1, v.entry, v.sl, close)
+    // 3. signal at close queues an order for the next open
+    if sig != 0
+        if v.side == 0
+            if allowEntry
+                v.pend := 1
+                v.pendSide := sig
+        else if sig != v.side
+            v.pend := allowEntry ? 2 : 3
+            v.pendSide := sig
+
+var VPos vHull = VPos.new(pnl = array.new<float>())
+var VPos vUt   = VPos.new(pnl = array.new<float>())
+vHull.vBar(hullSig)
+vUt.vBar(utSig)
+
+// ---------------- Selector rules 1–5 ----------------
+var string active = "hull"
+var string pending = ""
+int posSide = strategy.position_size > 0 ? 1 : strategy.position_size < 0 ? -1 : 0
+float scoreHull = vHull.pnl.sum()
+float scoreUt = vUt.pnl.sum()
+if mode == "Hull only"
+    active := "hull"
+    pending := ""
+else if mode == "UT only"
+    active := "ut"
+    pending := ""
+else if bar_index >= warmup
+    if vHull.count < selN or vUt.count < selN
+        active := "hull"
+        pending := ""
+    else
+        string cand = active == "hull" ? "ut" : "hull"
+        float sCand = cand == "hull" ? scoreHull : scoreUt
+        float sAct = active == "hull" ? scoreHull : scoreUt
+        pending := sCand >= sAct + selMargin - eps ? cand : ""
+        if pending != ""
+            int pSig = pending == "hull" ? hullSig : utSig
+            if posSide == 0
+                active := pending
+                pending := ""
+            else if pSig != 0 and pSig != posSide
+                active := pending
+                pending := ""
+
+int activeSig = active == "hull" ? hullSig : utSig
+
+// ---------------- Real position: entries, reversals, exits ----------------
+var float realSl = na
+var float realTp = na
+var int realStage = 0
+bool justOpened = posSide != 0 and (posSide != (strategy.position_size[1] > 0 ? 1 : strategy.position_size[1] < 0 ? -1 : 0))
+if justOpened
+    float e = strategy.position_avg_price
+    realSl := posSide == 1 ? roundUp(e - slDist) : roundDown(e + slDist)
+    realTp := roundNear(posSide == 1 ? e + tpDist : e - tpDist)
+    realStage := 0
+else if posSide != 0
+    realSl := nextStop(posSide, strategy.position_avg_price, realSl, close)
+    realStage := stageOf(posSide, strategy.position_avg_price, realSl)
+
+// A new entry gets its own provisional bracket (from this close); the fill bar recomputes it exactly
+// from the average fill price. The current position keeps realSl / realTp until it is closed.
+string pendId = ""
+float pendSl = na
+float pendTp = na
+if activeSig != 0 and bar_index >= warmup and (posSide == 0 or activeSig != posSide)
+    if allowEntry
+        pendId := activeSig == 1 ? "L" : "S"
+        strategy.entry(pendId, activeSig == 1 ? strategy.long : strategy.short, comment = (posSide == 0 ? "" : "rev ") + active)
+        pendSl := activeSig == 1 ? roundUp(close - slDist) : roundDown(close + slDist)
+        pendTp := roundNear(activeSig == 1 ? close + tpDist : close - tpDist)
+    else if posSide != 0
+        strategy.close_all(comment = "rev (gated)")
+
+if posSide == 1
+    strategy.exit("XL", from_entry = "L", stop = realSl, limit = realTp)
+else if posSide == -1
+    strategy.exit("XS", from_entry = "S", stop = realSl, limit = realTp)
+if pendId == "L"
+    strategy.exit("XL", from_entry = "L", stop = pendSl, limit = pendTp)
+else if pendId == "S"
+    strategy.exit("XS", from_entry = "S", stop = pendSl, limit = pendTp)
+
+// ---------------- Plots ----------------
+hullCol = hullUp ? color.new(#22c55e, 0) : color.new(#f05252, 0)
+pH = plot(hull, "Hull", hullCol, 2)
+pH2 = plot(hull[2], "Hull[2]", hullCol, 1)
+fill(pH, pH2, color.new(hullCol, 75))
+plot(bar_index >= utAtr ? utStop : na, "UT stop", color.new(#5b9dff, 0), 1, plot.style_stepline)
+plot(posSide != 0 ? realSl : na, "Stop-loss", color.new(#f05252, 0), 1, plot.style_linebr)
+plot(posSide != 0 ? realTp : na, "Take-profit", color.new(#22c55e, 0), 1, plot.style_linebr)
+plotshape(hullSig == 1, "Hull long", shape.triangleup, location.belowbar, color.new(#22c55e, 30), size = size.tiny)
+plotshape(hullSig == -1, "Hull short", shape.triangledown, location.abovebar, color.new(#f05252, 30), size = size.tiny)
+plotshape(utSig == 1, "UT buy", shape.labelup, location.belowbar, color.new(#5b9dff, 0), text = "UT", textcolor = color.white, size = size.tiny)
+plotshape(utSig == -1, "UT sell", shape.labeldown, location.abovebar, color.new(#f5a524, 0), text = "UT", textcolor = color.white, size = size.tiny)
+
+var table tb = table.new(position.top_right, 2, 6, bgcolor = color.new(#171a21, 0), border_color = #262b36, border_width = 1)
+if barstate.islast
+    tb.cell(0, 0, "Mode", text_color = color.gray)
+    tb.cell(1, 0, mode, text_color = color.white)
+    tb.cell(0, 1, "Active", text_color = color.gray)
+    tb.cell(1, 1, str.upper(active) + (pending != "" ? " (pending " + pending + ")" : ""), text_color = color.white)
+    tb.cell(0, 2, "Hull score", text_color = color.gray)
+    tb.cell(1, 2, str.tostring(scoreHull, "#.##"), text_color = scoreHull >= 0 ? color.lime : color.red)
+    tb.cell(0, 3, "UT score", text_color = color.gray)
+    tb.cell(1, 3, str.tostring(scoreUt, "#.##"), text_color = scoreUt >= 0 ? color.lime : color.red)
+    tb.cell(0, 4, "Stop / stage", text_color = color.gray)
+    tb.cell(1, 4, posSide != 0 ? str.tostring(realSl, "#.##") + " / " + str.tostring(realStage) : "—", text_color = color.white)
+    tb.cell(0, 5, "Entries", text_color = color.gray)
+    tb.cell(1, 5, allowEntry ? "open" : (skipWeekend and weekendIst ? "blocked (weekend IST)" : "blocked (ATR > " + str.tostring(atrGateMax) + ")"), text_color = color.white)
+
+// Export for the golden test: Data Window values "Hull" and "UT stop" (List of Trades → export, or the
+// chart's "Export chart data" with these plots visible) → tests/fixtures/eth_1h_golden.csv
+// columns: time,open,high,low,close,hull,ut_stop

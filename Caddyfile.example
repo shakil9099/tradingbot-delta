@@ -1,0 +1,6 @@
+# /etc/caddy/Caddyfile — HTTPS reverse proxy for the dashboard. Replace the domain.
+# Caddy obtains the certificate automatically and adds X-Forwarded-For.
+bot.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000
+}
