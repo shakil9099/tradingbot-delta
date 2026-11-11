@@ -34,6 +34,7 @@ async function main() {
     ctlToken: env.CTL_TOKEN,
     sessionSecret: env.SESSION_SECRET,
     cookieSecure: env.COOKIE_SECURE,
+    trustProxy: env.TRUST_PROXY,
     consecutiveFailures: () => client?.consecutiveFailures ?? 0,
     nextCycleAt: () => (scheduler?.nextRunAt ? Math.floor(scheduler.nextRunAt / 1000) : null),
     settings: {
@@ -53,7 +54,7 @@ async function main() {
       },
     },
   });
-  const server = app.listen(env.PORT, '127.0.0.1', () => log.info({ port: env.PORT }, 'dashboard listening on 127.0.0.1'));
+  const server = app.listen(env.PORT, env.HOST, () => log.info({ port: env.PORT, host: env.HOST }, `dashboard listening on ${env.HOST}`));
 
   // 15. Started.
   alert(`started (${mode.live ? 'LIVE' : 'PAPER'}${mode.envLock ? ' — DRY_RUN lock' : ''}, keys: ${mode.source}, strategy ${env.STRATEGY}${env.ATR_GATE_MAX ? `, ATR gate ${env.ATR_GATE_MAX}` : ''}${env.SKIP_WEEKEND_ENTRIES ? ', no weekend entries' : ''})`);

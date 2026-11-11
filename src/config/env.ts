@@ -19,6 +19,10 @@ const schema = z
     TELEGRAM_BOT_TOKEN: optStr,
     TELEGRAM_CHAT_ID: optStr,
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    /** Listen address. 127.0.0.1 behind Caddy (EC2); 0.0.0.0 on platforms that route to the container (Railway). */
+    HOST: z.string().default('127.0.0.1'),
+    /** Express 'trust proxy': 'loopback' behind Caddy; '1' behind one platform proxy (Railway) so HTTPS and client IPs are seen. */
+    TRUST_PROXY: z.string().default('loopback'),
     DRY_RUN: bool('false'),
     PAPER_BALANCE: z.coerce.number().positive().default(141),
     MAX_CONTRACTS: z.coerce.number().int().min(1).default(100000),

@@ -29,6 +29,25 @@ export interface TrailInput {
   candles: readonly Candle[];
 }
 
+/** Delta rejects client_order_id longer than 32 characters (verified on the first live run, 2026-11-10). */
+export const MAX_COID = 32;
+const REASON_CODE: Record<ExitReason, string> = {
+  sl_stage_0: 's0',
+  sl_stage_1: 's1',
+  sl_stage_2: 's2',
+  tp: 'tp',
+  reversal: 'rv',
+  manual: 'mn',
+  trail_breached: 'tb',
+  margin_mode: 'mm',
+  liquidation: 'lq',
+  external: 'ex',
+};
+/** Entry id, e.g. eth-1794315600-o-s-1 (≤ 21 chars). */
+export const openCoid = (candleTime: number, side: Side, attempt: number) => `eth-${candleTime}-o-${side === 'buy' ? 'b' : 's'}-${attempt}`;
+/** Close id, e.g. eth-1794315600-c-mm-2 (≤ 21 chars). */
+export const closeCoid = (candleTime: number, reason: ExitReason, attempt: number) => `eth-${candleTime}-c-${REASON_CODE[reason]}-${attempt}`;
+
 /** kv key of the balance peak used by the risk throttle; separate for paper and live. */
 export const peakKey = (dryRun: boolean) => (dryRun ? 'equity_peak_paper' : 'equity_peak_live');
 
@@ -129,7 +148,7 @@ export class Executor {
     };
 
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const coid = `eth-${candleTime}-open-${side}-${attempt}`;
+      const coid = openCoid(candleTime, side, attempt);
       const id = repo.insertTrade({
         client_order_id: coid,
         status: 'OPENING',
@@ -275,7 +294,7 @@ export class Executor {
       return 'flat';
     }
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const coid = `eth-${ct}-close-${reason}-${attempt}`;
+      const coid = closeCoid(ct, reason, attempt);
       if (trade) repo.updateTrade(trade.id, { status: 'CLOSING', close_reason: reason, close_client_order_id: coid });
       const startedAt = this.c.now();
       try {

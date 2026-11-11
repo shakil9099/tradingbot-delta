@@ -1,0 +1,12 @@
+# Never upload secrets, local data or build output (Railway builds from source).
+.env
+.env.*
+!.env.example
+data/
+node_modules/
+web/node_modules/
+dist/
+web/dist/
+coverage/
+*.log
+scripts/archive/

@@ -110,3 +110,33 @@ describe('/health', () => {
     expect(r.body.reason).toContain('bracket');
   });
 });
+
+describe('behind a platform proxy (Railway: TRUST_PROXY=1, COOKIE_SECURE=true)', () => {
+  function proxied(trustProxy?: string) {
+    const env = makeEngine();
+    return createApp({
+      engine: env.engine,
+      user: 'admin',
+      passwordHash: hash,
+      ctlToken: TOKEN,
+      sessionSecret: 's'.repeat(40),
+      cookieSecure: true,
+      trustProxy,
+      consecutiveFailures: () => 0,
+      nextCycleAt: () => null,
+      webDist: '/nonexistent',
+    });
+  }
+  it('login over the proxy\'s HTTPS sets a Secure cookie when the proxy is trusted', async () => {
+    const r = await request(proxied('1'))
+      .post('/api/login')
+      .set('X-Forwarded-Proto', 'https')
+      .set('X-Forwarded-For', '203.0.113.9')
+      .send({ user: 'admin', password: 'correct horse battery' })
+      .expect(200);
+    expect(String(r.headers['set-cookie'])).toMatch(/secure/i);
+  });
+  it('the ctl token is refused through the proxy (X-Forwarded-For present)', async () => {
+    await request(proxied('1')).get('/api/status').set('X-Ctl-Token', TOKEN).set('X-Forwarded-For', '203.0.113.9').expect(401);
+  });
+});

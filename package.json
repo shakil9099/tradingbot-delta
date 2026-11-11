@@ -5,7 +5,7 @@
   "description": "ETHUSD perpetual trading bot for Delta Exchange India (Hull / UT Bot adaptive).",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "build": "tsc && npm --prefix web ci && npm --prefix web run build",

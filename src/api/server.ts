@@ -14,13 +14,16 @@ export interface ServerOpts extends Omit<RouteDeps, 'auth'> {
   sessionSecret: string;
   cookieSecure: boolean;
   webDist?: string;
+  /** Express 'trust proxy' (default 'loopback'; a number = proxy hops, e.g. '1' on Railway). */
+  trustProxy?: string;
   /** Dashboard API keys and the paper/live switch (Amendment B). Omitted in tests that do not need it. */
   settings?: Omit<SettingsDeps, 'engine' | 'auth' | 'localOnly'>;
 }
 
 export function createApp(o: ServerOpts): Express {
   const app = express();
-  app.set('trust proxy', 'loopback');
+  const tp = o.trustProxy ?? 'loopback';
+  app.set('trust proxy', /^\d+$/.test(tp) ? Number(tp) : tp);
   app.disable('x-powered-by');
   app.use(
     cookieSession({

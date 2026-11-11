@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { peakKey } from '../src/exchange/executor.js';
+import { MAX_COID, closeCoid, openCoid, peakKey } from '../src/exchange/executor.js';
 import { ExchangeError } from '../src/exchange/types.js';
 import { makeEngine } from './fakes/setup.js';
 import { bar } from './helpers.js';
@@ -350,5 +350,28 @@ describe('executor.trail (break-even and ATR trailing)', () => {
     expect(fx.position).toBeNull();
     expect(halt.state().kind).toBe('fatal_error');
     expect(repo.listTrades()[0].status).toBe('CLOSED');
+  });
+});
+
+describe('client_order_id length (Delta max 32)', () => {
+  it('every entry and close id fits, for every exit reason, side and attempt', () => {
+    const reasons = ['sl_stage_0', 'sl_stage_1', 'sl_stage_2', 'tp', 'reversal', 'manual', 'trail_breached', 'margin_mode', 'liquidation', 'external'] as const;
+    const t = 9_999_999_999; // far-future candle time (10 digits)
+    for (const a of [1, 2]) {
+      for (const side of ['buy', 'sell'] as const) expect(openCoid(t, side, a).length).toBeLessThanOrEqual(MAX_COID);
+      for (const r of reasons) expect(closeCoid(t, r, a).length).toBeLessThanOrEqual(MAX_COID);
+    }
+    expect(closeCoid(1794315600, 'margin_mode', 2)).toBe('eth-1794315600-c-mm-2');
+  });
+
+  it('the ids actually sent to the exchange are short', async () => {
+    const { fx, exec } = makeEngine();
+    const sent: string[] = [];
+    const orig = fx.placeOrder.bind(fx);
+    fx.placeOrder = async (req) => (sent.push(req.clientOrderId), orig(req));
+    await exec.enter('buy', H - 3600, reason, R);
+    await exec.close('margin_mode');
+    expect(sent).toHaveLength(2);
+    for (const id of sent) expect(id.length).toBeLessThanOrEqual(MAX_COID);
   });
 });
