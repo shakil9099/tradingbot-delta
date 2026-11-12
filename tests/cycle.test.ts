@@ -135,3 +135,46 @@ describe('runCycle', () => {
     expect(repo.listDecisions()[0]).toMatchObject({ action: 'ERROR' });
   });
 });
+
+describe('manualEnter', () => {
+  it('opens a sized short with an exchange stop, bypassing (and recording) the low-volatility filter', async () => {
+    const { fx, repo, engine } = makeEngine({ STRATEGY: 'hull' }); // MIN_ATR 15 blocks a signal entry on this series
+    fx.candles = seriesWithHullSignalAtEnd();
+    fx.price = fx.candles.at(-1)!.close;
+    const r = await engine.manualEnter('sell');
+    expect(r.result).toBe('opened');
+    expect(r.note).toContain('low volatility');
+    const t = repo.openTrade()!;
+    expect(t).toMatchObject({ status: 'OPEN', side: 'sell' });
+    expect(t.sl_price!).toBeGreaterThan(fx.price);
+    expect(JSON.parse(t.entry_reason!)).toMatchObject({ signal: 'manual entry', manual: true });
+    expect(repo.listSystemEvents('manual_enter')).toHaveLength(1);
+  });
+
+  it('respects MAX_CONTRACTS', async () => {
+    const { fx, repo, engine } = makeEngine({ STRATEGY: 'hull', MAX_CONTRACTS: 3 });
+    fx.candles = seriesWithHullSignalAtEnd();
+    fx.price = fx.candles.at(-1)!.close;
+    expect((await engine.manualEnter('buy')).result).toBe('opened');
+    expect(repo.openTrade()!.size_contracts).toBeLessThanOrEqual(3);
+  });
+
+  it('is refused when a position is open or the bot is halted', async () => {
+    const { fx, repo, engine, halt } = makeEngine({ STRATEGY: 'hull' });
+    fx.candles = seriesWithHullSignalAtEnd();
+    fx.price = fx.candles.at(-1)!.close;
+    await engine.manualEnter('buy');
+    const again = await engine.manualEnter('sell');
+    expect(again.result).toBe('refused');
+    expect(again.note).toContain('already open');
+    expect(repo.listTrades()).toHaveLength(1);
+
+    const b = makeEngine({ STRATEGY: 'hull' });
+    b.fx.candles = seriesWithHullSignalAtEnd();
+    b.halt.halt('test', 'manual');
+    const h = await b.engine.manualEnter('sell');
+    expect(h.result).toBe('refused');
+    expect(b.repo.listTrades()).toHaveLength(0);
+    void halt;
+  });
+});

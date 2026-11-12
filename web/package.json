@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:mock": "node mock/server.mjs & API_TARGET=http://127.0.0.1:3999 vite --port 5174 --strictPort; kill %1"
   },
   "dependencies": {
     "react": "18.3.1",

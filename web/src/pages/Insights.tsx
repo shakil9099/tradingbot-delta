@@ -6,12 +6,12 @@ function Row({ name, s }: { name: string; s: StrategyStats }) {
   return (
     <tr>
       <td>{name}</td>
-      <td>{s.count}</td>
-      <td>{(s.winRate * 100).toFixed(0)}%</td>
-      <td className={pnlClass(s.netPnl)}>{fmtUsd(s.netPnl)}</td>
-      <td>{fmtUsd(s.avgWin)}</td>
-      <td>{fmtUsd(s.avgLoss)}</td>
-      <td>{s.profitFactor === null ? '—' : fmtNum(s.profitFactor)}</td>
+      <td className="num">{s.count}</td>
+      <td className="num">{(s.winRate * 100).toFixed(0)}%</td>
+      <td className={`num ${pnlClass(s.netPnl)}`}>{fmtUsd(s.netPnl)}</td>
+      <td className="num">{fmtUsd(s.avgWin)}</td>
+      <td className="num">{fmtUsd(s.avgLoss)}</td>
+      <td className="num">{s.profitFactor === null ? '—' : fmtNum(s.profitFactor)}</td>
     </tr>
   );
 }
@@ -21,10 +21,16 @@ export default function Insights() {
   const st = usePolling(api.stats, 120000);
   return (
     <>
+      <div className="page-head">
+        <div>
+          <h1>Insights</h1>
+          <p className="muted small">Rule-based checks over the live trade log (need at least 10 closed trades).</p>
+        </div>
+      </div>
       <section className="card">
         <h2>What can be improved</h2>
-        <p className="muted small">Rule-based checks over the live trade log (need ≥10 closed trades).</p>
         <div className="insights">
+          {ins.data && !ins.data.insights.length && <div className="empty small">No suggestions yet.</div>}
           {(ins.data?.insights ?? []).map((i) => (
             <div key={i.id} className={`insight ${i.severity}`}>
               <small className="muted">{i.id.replace(/_/g, ' ')}</small>
@@ -41,12 +47,12 @@ export default function Insights() {
               <thead>
                 <tr>
                   <th>Strategy</th>
-                  <th>Trades</th>
-                  <th>Win rate</th>
-                  <th>Net</th>
-                  <th>Avg win</th>
-                  <th>Avg loss</th>
-                  <th>Profit factor</th>
+                  <th className="num">Trades</th>
+                  <th className="num">Win rate</th>
+                  <th className="num">Net</th>
+                  <th className="num">Avg win</th>
+                  <th className="num">Avg loss</th>
+                  <th className="num">Profit factor</th>
                 </tr>
               </thead>
               <tbody>

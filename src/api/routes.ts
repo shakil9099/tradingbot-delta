@@ -134,6 +134,15 @@ export function buildRouter(d: RouteDeps): Router {
     }),
   );
   r.post(
+    '/api/control/enter',
+    wrap(async (req, res) => {
+      const side = (req.body as { side?: unknown } | undefined)?.side;
+      if (side !== 'buy' && side !== 'sell') return void res.status(400).json({ error: 'side must be "buy" or "sell"' });
+      const r = await engine.manualEnter(side);
+      res.status(r.result === 'opened' ? 200 : 409).json(r);
+    }),
+  );
+  r.post(
     '/api/control/pause',
     wrap(async (_req, res) => {
       await engine.pause();

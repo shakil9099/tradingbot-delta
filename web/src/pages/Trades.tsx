@@ -11,8 +11,14 @@ export default function Trades() {
   const { data, error } = usePolling(() => api.trades(PAGE, page * PAGE), 30000, [page]);
   if (!data) return <p className="muted">{error ?? 'Loading…'}</p>;
   return (
+    <>
+    <div className="page-head">
+      <div>
+        <h1>Trades</h1>
+        <p className="muted small">{data.total} trades · click a row for the full story</p>
+      </div>
+    </div>
     <section className="card">
-      <h2>Trades ({data.total})</h2>
       <div className="scroll">
         <table>
           <thead>
@@ -21,10 +27,10 @@ export default function Trades() {
               <th>Opened</th>
               <th>Side</th>
               <th>Strategy</th>
-              <th>Entry</th>
-              <th>Exit</th>
+              <th className="num">Entry</th>
+              <th className="num">Exit</th>
               <th>Reason</th>
-              <th>Net</th>
+              <th className="num">Net</th>
             </tr>
           </thead>
           <tbody>
@@ -32,17 +38,19 @@ export default function Trades() {
               <tr key={t.id} onClick={() => setOpen(t.id)} className="clickable">
                 <td>{t.id}{t.dry_run ? ' 🧪' : ''}</td>
                 <td>{fmtTime(t.entry_time)}</td>
-                <td className={t.side === 'buy' ? 'pos' : 'neg'}>{t.side === 'buy' ? 'LONG' : 'SHORT'}</td>
+                <td><span className={`chip ${t.side === 'buy' ? 'long' : 'short'}`}>{t.side === 'buy' ? 'LONG' : 'SHORT'}</span></td>
                 <td>{t.strategy}</td>
-                <td>{fmtNum(t.entry_price)}</td>
-                <td>{fmtNum(t.exit_price)}</td>
-                <td>{t.exit_reason ?? t.status}</td>
-                <td className={pnlClass(t.net_pnl)}>{fmtUsd(t.net_pnl)}</td>
+                <td className="num">{fmtNum(t.entry_price)}</td>
+                <td className="num">{fmtNum(t.exit_price)}</td>
+                <td className="muted">{(t.exit_reason ?? t.status).replace(/_/g, ' ')}</td>
+                <td className={`num ${pnlClass(t.net_pnl)}`}>
+                  <strong>{fmtUsd(t.net_pnl)}</strong>
+                </td>
               </tr>
             ))}
             {!data.trades.length && (
               <tr>
-                <td colSpan={8} className="muted">No trades yet.</td>
+                <td colSpan={8} className="muted" style={{ textAlign: 'center', padding: 24 }}>No trades yet.</td>
               </tr>
             )}
           </tbody>
@@ -51,8 +59,10 @@ export default function Trades() {
       <div className="pager">
         <button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>← Newer</button>
         <button disabled={(page + 1) * PAGE >= data.total} onClick={() => setPage((p) => p + 1)}>Older →</button>
+        <span className="muted small">page {page + 1} of {Math.max(1, Math.ceil(data.total / PAGE))}</span>
       </div>
       {open !== null && <TradeDrawer id={open} onClose={() => setOpen(null)} />}
     </section>
+    </>
   );
 }

@@ -123,7 +123,7 @@ function KeysCard({ s, reload, onRestart }: { s: S; reload: () => void; onRestar
             <input type="password" value={password} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required />
           </label>
           <div className="controls">
-            <button type="submit" disabled={busy || !s.flat || !perm}>
+            <button type="submit" className="primary" disabled={busy || !s.flat || !perm}>
               {busy ? 'Testing with Delta…' : c.source === 'stored' ? 'Replace keys' : 'Save keys'}
             </button>
             {c.source === 'stored' && (
@@ -255,9 +255,17 @@ export default function Settings() {
   const s = st.data;
   if (!s) return <p className="muted">{st.error ?? 'Loading…'}</p>;
   return (
-    <div className="row">
-      <ModeCard s={s} onRestart={() => setRestarting(true)} />
-      <KeysCard s={s} reload={st.reload} onRestart={() => setRestarting(true)} />
-    </div>
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Settings</h1>
+          <p className="muted small">Trading mode and Delta API keys. Every change asks for your dashboard password.</p>
+        </div>
+      </div>
+      <div className="row">
+        <ModeCard s={s} onRestart={() => setRestarting(true)} />
+        <KeysCard s={s} reload={st.reload} onRestart={() => setRestarting(true)} />
+      </div>
+    </>
   );
 }

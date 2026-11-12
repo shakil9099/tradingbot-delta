@@ -13,7 +13,7 @@ export default function ConfirmButton({ label, onConfirm, danger }: { label: str
   return (
     <span className="confirm">
       <button
-        className={danger ? 'danger' : ''}
+        className={armed ? 'armed' : danger ? 'danger' : ''}
         disabled={busy}
         onClick={async () => {
           if (!armed) return setArmed(true);

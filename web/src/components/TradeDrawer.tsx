@@ -31,11 +31,12 @@ export default function TradeDrawer({ id, onClose }: { id: number; onClose: () =
   return (
     <div className="drawer-bg" onClick={onClose}>
       <aside className="drawer" onClick={(e) => e.stopPropagation()}>
-        <button className="link right" onClick={onClose}>
-          Close ✕
+        <button className="link right" onClick={onClose} aria-label="Close">
+          ✕
         </button>
         <h2>
-          Trade #{t.id} — {t.side === 'buy' ? 'LONG' : 'SHORT'} {t.size_contracts} ct
+          Trade #{t.id} <span className={`chip ${t.side === 'buy' ? 'long' : 'short'}`}>{t.side === 'buy' ? 'LONG' : 'SHORT'}</span>{' '}
+          <span className="muted small">{t.size_contracts} ct</span>
         </h2>
         <h3>Why it opened</h3>
         <p>
@@ -73,7 +74,7 @@ export default function TradeDrawer({ id, onClose }: { id: number; onClose: () =
             }
             return (
               <li key={e.id}>
-                <small className="muted">{fmtTime(e.time)}</small>{' '}
+                <small className="muted">{fmtTime(e.time)}</small>
                 {e.type === 'sl_move'
                   ? `stop ${fmtNum(data.oldSl as number)} → ${fmtNum(data.newSl as number)} (stage ${data.stage})`
                   : e.type === 'bracket_attach'

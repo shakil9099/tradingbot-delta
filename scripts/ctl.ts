@@ -1,4 +1,4 @@
-// npm run ctl -- <pause|resume|close|status|reset-peak>
+// npm run ctl -- <pause|resume|close|enter-long|enter-short|status|reset-peak>
 // Thin HTTP client for the running bot (over SSH on the VPS). Uses X-Ctl-Token on loopback,
 // so commands run inside the bot process under the same mutex.
 import 'dotenv/config';
@@ -6,7 +6,9 @@ import 'dotenv/config';
 const cmd = process.argv[2];
 const port = process.env.PORT ?? '3000';
 const token = process.env.CTL_TOKEN;
-const routes: Record<string, { method: string; path: string }> = {
+const routes: Record<string, { method: string; path: string; body?: unknown }> = {
+  'enter-long': { method: 'POST', path: '/api/control/enter', body: { side: 'buy' } },
+  'enter-short': { method: 'POST', path: '/api/control/enter', body: { side: 'sell' } },
   pause: { method: 'POST', path: '/api/control/pause' },
   resume: { method: 'POST', path: '/api/control/resume' },
   close: { method: 'POST', path: '/api/control/close' },
@@ -17,14 +19,14 @@ const routes: Record<string, { method: string; path: string }> = {
 async function main() {
   const r = routes[cmd ?? ''];
   if (!r) {
-    console.error('usage: npm run ctl -- <pause|resume|close|status|reset-peak>');
+    console.error('usage: npm run ctl -- <pause|resume|close|enter-long|enter-short|status|reset-peak>');
     process.exit(1);
   }
   if (!token) {
     console.error('CTL_TOKEN is not set in .env');
     process.exit(1);
   }
-  const res = await fetch(`http://127.0.0.1:${port}${r.path}`, { method: r.method, headers: { 'X-Ctl-Token': token, 'Content-Type': 'application/json' } });
+  const res = await fetch(`http://127.0.0.1:${port}${r.path}`, { method: r.method, headers: { 'X-Ctl-Token': token, 'Content-Type': 'application/json' }, body: r.body ? JSON.stringify(r.body) : undefined });
   const text = await res.text();
   try {
     console.log(JSON.stringify(JSON.parse(text), null, 2));

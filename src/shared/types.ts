@@ -41,6 +41,7 @@ export type HaltKind = 'breaker' | 'manual' | 'mismatch' | 'fatal_error' | 'cras
 
 export type SystemEventType =
   | 'strategy_switch'
+  | 'manual_enter'
   | 'halt'
   | 'resume'
   | 'boot'
