@@ -8,6 +8,7 @@ import Insights from './pages/Insights';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Trades from './pages/Trades';
+import Options from './pages/Options';
 
 /** PAPER / LIVE badge and health dot on every page (Amendment B.6). */
 function TopStatus() {
@@ -46,6 +47,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NavLink to="/trades">Trades</NavLink>
           <NavLink to="/decisions">Decisions</NavLink>
           <NavLink to="/insights">Insights</NavLink>
+          <NavLink to="/options">Options</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="top-right">
@@ -74,6 +76,7 @@ export default function App() {
       <Route path="/decisions" element={<Shell><Decisions /></Shell>} />
       <Route path="/insights" element={<Shell><Insights /></Shell>} />
       <Route path="/settings" element={<Shell><Settings /></Shell>} />
+      <Route path="/options" element={<Shell><Options /></Shell>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -57,7 +57,8 @@ export const DEFAULT_PARAMS: Readonly<Params> = Object.freeze({
   SL_MIN: 10,
   SL_MAX: 40,
   MIN_ATR: 15,
-  BE_TRIG_R: 0.5,
+  /** 2026-11-14: 0.5 → 1 (docs/hull-breakeven.md: later move-to-cost beat 0.5R in both test periods). */
+  BE_TRIG_R: 1,
   TRAIL_TRIG_R: 1.5,
   TRAIL_ATR_MULT: 3,
   TP_R: 0,

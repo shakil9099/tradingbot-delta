@@ -2,7 +2,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { DEFAULT_PARAMS, type Params } from '../src/config/params.js';
 import type { Candle } from '../src/shared/types.js';
 
-export const P: Params = { ...DEFAULT_PARAMS };
+// Exit-mechanics tests are written for a 0.5R break-even trigger; the live default became 1R on 2026-11-14.
+export const P: Params = { ...DEFAULT_PARAMS, BE_TRIG_R: 0.5 };
 
 export function readCsv(path: string): Record<string, string>[] {
   const [header, ...rows] = readFileSync(path, 'utf8').trim().split('\n');

@@ -253,7 +253,8 @@ describe('executor.ensureLeverage', () => {
 
 describe('executor.trail (break-even and ATR trailing)', () => {
   async function open(r = R) {
-    const env = makeEngine();
+    // These tests check the break-even/trailing mechanics at the original 0.5R trigger (the live default is now 1R).
+    const env = makeEngine({ BE_TRIG_R: 0.5 });
     env.fx.price = 2000;
     await env.exec.enter('buy', H - 3600, reason, r);
     return env;

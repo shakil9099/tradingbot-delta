@@ -1,0 +1,78 @@
+//@version=5
+// UT Bot Sniper — ETHUSD 1h (Delta India ETHUSD.P)
+// Entry: UT Bot (key 1, ATR 10) signal, ONLY when
+//   1) the 4-hour UT Bot (1, 10) points the same way (last completed 4h bar, no repaint), and
+//   2) the signal bar closes beyond the highest high / lowest low of the previous 10 bars.
+// Exit: the opposite UT Bot signal (every one, filtered or not). If that opposite signal also passes the
+// filters, the trade reverses; otherwise the strategy goes flat and waits.
+// Weekend: no new entries that would fill on Saturday or Sunday (IST); an open trade is held.
+// Backtest (scripts/utSniper.ts): rule chosen on Feb 2024 → Nov 2025, then tested on Nov 2025 → Nov 2026:
+// 39 trades, 41% win, +425 $/ETH, profit factor 1.71, max drawdown 187 $/ETH (fees 0.059%/side, 1 tick slip).
+strategy("UT Bot Sniper (1,10) + 4h UT + 10-bar breakout", overlay = true, initial_capital = 10000,
+     default_qty_type = strategy.fixed, default_qty_value = 1, commission_type = strategy.commission.percent,
+     commission_value = 0.059, slippage = 1, process_orders_on_close = false, calc_on_every_tick = false)
+
+keyValue  = input.float(1.0, "UT key value", step = 0.1)
+atrPeriod = input.int(10, "UT ATR period", minval = 1)
+htfTf     = input.timeframe("240", "Higher timeframe for UT trend")
+useHtf    = input.bool(true, "Filter: higher-timeframe UT agrees")
+brkLen    = input.int(10, "Filter: breakout lookback (bars)", minval = 1)
+useBrk    = input.bool(true, "Filter: close beyond N-bar high/low")
+skipWkend = input.bool(true, "No new entries Sat–Sun (IST)")
+fromDate  = input.time(timestamp("2025-11-13T00:00:00+05:30"), "Trade from")
+
+// ---- UT Bot trailing stop ----
+utTrail(float k, int n) =>
+    float nLoss = k * ta.atr(n)
+    var float trail = 0.0
+    float prev = nz(trail[1])
+    trail := close > prev and close[1] > prev ? math.max(prev, close - nLoss) :
+             close < prev and close[1] < prev ? math.min(prev, close + nLoss) :
+             close > prev ? close - nLoss : close + nLoss
+    trail
+
+utDir(float k, int n) =>
+    float t = utTrail(k, n)
+    close > t ? 1 : -1
+
+trail = utTrail(keyValue, atrPeriod)
+buySig  = close > trail and close[1] <= trail[1]
+sellSig = close < trail and close[1] >= trail[1]
+
+// ---- filters ----
+// Last COMPLETED higher-timeframe bar (lookahead_on + [1] = no repaint).
+htfDir = request.security(syminfo.tickerid, htfTf, utDir(keyValue, atrPeriod)[1], lookahead = barmerge.lookahead_on)
+brkUp = close > ta.highest(high, brkLen)[1]
+brkDn = close < ta.lowest(low, brkLen)[1]
+nextOpenDow = dayofweek(time_close, "Asia/Kolkata")
+weekend = skipWkend and (nextOpenDow == dayofweek.saturday or nextOpenDow == dayofweek.sunday)
+inRange = time >= fromDate
+
+longOk  = buySig  and (not useHtf or htfDir == 1)  and (not useBrk or brkUp) and not weekend and inRange
+shortOk = sellSig and (not useHtf or htfDir == -1) and (not useBrk or brkDn) and not weekend and inRange
+
+// ---- orders (signal on bar close, fill at next bar open) ----
+if buySig
+    if longOk
+        strategy.entry("Long", strategy.long)      // also closes a short
+    else
+        strategy.close("Short", comment = "exit: UT buy")
+if sellSig
+    if shortOk
+        strategy.entry("Short", strategy.short)    // also closes a long
+    else
+        strategy.close("Long", comment = "exit: UT sell")
+
+// ---- visuals ----
+plot(trail, "UT trailing stop", color = close > trail ? color.new(color.teal, 30) : color.new(color.red, 30), linewidth = 1)
+plotshape(buySig and not longOk,  "UT buy (skipped)",  shape.triangleup,   location.belowbar, color.new(color.gray, 40), size = size.tiny)
+plotshape(sellSig and not shortOk, "UT sell (skipped)", shape.triangledown, location.abovebar, color.new(color.gray, 40), size = size.tiny)
+plotshape(longOk,  "Sniper LONG",  shape.labelup,   location.belowbar, color.new(color.green, 0), text = "BUY",  textcolor = color.white, size = size.small)
+plotshape(shortOk, "Sniper SHORT", shape.labeldown, location.abovebar, color.new(color.red, 0),   text = "SELL", textcolor = color.white, size = size.small)
+bgcolor(useHtf ? (htfDir == 1 ? color.new(color.teal, 94) : color.new(color.red, 94)) : na, title = "4h UT trend")
+
+// ---- alerts ----
+alertcondition(longOk,  "Sniper LONG",  "ETH sniper LONG: UT buy + 4h UT up + 10-bar breakout")
+alertcondition(shortOk, "Sniper SHORT", "ETH sniper SHORT: UT sell + 4h UT down + 10-bar breakdown")
+alertcondition(buySig and not longOk,  "Exit SHORT (UT buy, no new long)",  "ETH: close short (UT buy)")
+alertcondition(sellSig and not shortOk, "Exit LONG (UT sell, no new short)", "ETH: close long (UT sell)")
