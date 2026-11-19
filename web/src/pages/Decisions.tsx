@@ -24,7 +24,7 @@ export default function Decisions() {
                 <th className="num">Close</th>
                 <th className="num">Hull</th>
                 <th className="num">UT stop</th>
-                <th className="num">ATR</th>
+                <th className="num">ATR(14)</th>
                 <th>Hull sig</th>
                 <th>UT sig</th>
                 <th>Active</th>

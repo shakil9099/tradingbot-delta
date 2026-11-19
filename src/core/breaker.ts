@@ -9,6 +9,7 @@ export function nextCount(count: number, exitReason: ExitReason, netPnl: number)
   return count; // losing reversals, sl_stage_1, etc.
 }
 
+/** n <= 0 turns the breaker off. */
 export function shouldHalt(count: number, n: number): boolean {
-  return count >= n;
+  return n > 0 && count >= n;
 }

@@ -204,8 +204,17 @@ function ModeCard({ s, onRestart }: { s: S; onRestart: () => void }) {
           {!live && (
             <>
               <div className="banner neg-bg small">
-                Real money. Each trade risks <strong>{(s.risk * 100).toFixed(0)}%</strong> of the balance ({(s.riskReduced * 100).toFixed(0)}% after a 20% fall from the
-                peak). In the backtest the account fell 51% from a peak at one point. Start with a small balance.
+                {s.fixedContracts > 0 ? (
+                  <>
+                    Real money. Every trade is a fixed <strong>{(s.fixedContracts / 100).toFixed(2)} ETH</strong> (smaller only if the margin can't cover it), so one
+                    stop-out can cost $20–40. Start with a small balance.
+                  </>
+                ) : (
+                  <>
+                    Real money. Each trade risks <strong>{(s.risk * 100).toFixed(0)}%</strong> of the balance ({(s.riskReduced * 100).toFixed(0)}% after a 20% fall from
+                    the peak). In the backtest the account fell 51% from a peak at one point. Start with a small balance.
+                  </>
+                )}
               </div>
               <label className="check">
                 <input type="checkbox" checked={iso} onChange={(e) => setIso(e.target.checked)} />

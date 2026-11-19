@@ -8,6 +8,7 @@ const exitText: Record<string, string> = {
   sl_stage_2: 'trailing stop hit',
   tp: 'take-profit reached',
   reversal: 'closed by an opposite signal',
+  aa_break: 'closed by an opposite AlgoAlpha break',
   manual: 'closed manually',
   trail_breached: 'price passed the new stop before it was sent',
   margin_mode: 'closed: margin mode was cross',

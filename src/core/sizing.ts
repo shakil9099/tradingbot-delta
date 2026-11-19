@@ -1,4 +1,4 @@
-// Risk sizing (design Amendment A.4): contracts so that an initial-stop exit, fees included, loses `risk` of the
+// Fixed sizing (FIXED_CONTRACTS > 0) or risk sizing (design Amendment A.4): contracts so that an initial-stop exit, fees included, loses `risk` of the
 // balance; capped by margin (balance × leverage × 0.9) and MAX_CONTRACTS. Risk drops to RISK_REDUCED while the
 // balance is more than RISK_REDUCE_DD below its recorded peak.
 
@@ -16,6 +16,8 @@ export interface SizingInput {
   slippageTicks: number;
   /** ETH per contract; 0.01 for ETHUSD. */
   contractValue?: number;
+  /** > 0: this many contracts instead of risk sizing (margin and maxContracts still cap it). */
+  fixedContracts?: number;
 }
 
 export interface SizingResult {
@@ -35,7 +37,8 @@ export function contractsFor(input: SizingInput): SizingResult {
   const cv = input.contractValue ?? 0.01;
   const costPerEth = riskDist + price * 2 * input.feeRate + 2 * input.slippageTicks * input.tick;
   const ok = balanceUsd > 0 && price > 0 && riskDist > 0 && risk > 0 && Number.isFinite(costPerEth);
-  const base = ok ? Math.floor((balanceUsd * risk) / costPerEth / cv + EPS) : 0;
+  const fixed = Math.floor(input.fixedContracts ?? 0);
+  const base = !ok ? 0 : fixed > 0 ? fixed : Math.floor((balanceUsd * risk) / costPerEth / cv + EPS);
   const marginCap = ok ? Math.floor((balanceUsd * leverage * 0.9) / (price * cv) + EPS) : 0;
   const contracts = Math.max(0, Math.min(base, marginCap, Math.floor(maxContracts)));
   if (contracts < 1) return { contracts: 0, base, marginCap, effectiveLeverage: 0, riskUsd: 0, reason: 'SIZE_TOO_SMALL' };

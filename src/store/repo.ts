@@ -1,4 +1,5 @@
 import type {
+  Candle,
   DecisionRow,
   SimTrade,
   SystemEvent,
@@ -14,6 +15,35 @@ export const nowSec = () => Math.floor(Date.now() / 1000);
 /** Typed queries over the bot database. */
 export class Repo {
   constructor(readonly db: DB) {}
+
+  // ---------- 3-minute candles (STRATEGY=revaa) ----------
+  upsertCandles3m(rows: readonly Candle[]): void {
+    const st = this.db.prepare(
+      'INSERT INTO candles_3m(time, open, high, low, close, volume) VALUES(@time, @open, @high, @low, @close, @volume) ON CONFLICT(time) DO UPDATE SET open = excluded.open, high = excluded.high, low = excluded.low, close = excluded.close, volume = excluded.volume',
+    );
+    this.db.transaction((rs: readonly Candle[]) => {
+      for (const r of rs) st.run(r);
+    })(rows);
+  }
+  /** Candles with open time in [from, to). */
+  listCandles3m(from: number, to: number): Candle[] {
+    return this.db.prepare('SELECT time, open, high, low, close, volume FROM candles_3m WHERE time >= ? AND time < ? ORDER BY time').all(from, to) as Candle[];
+  }
+  lastCandle3mTime(): number | null {
+    const r = this.db.prepare('SELECT MAX(time) AS t FROM candles_3m').get() as { t: number | null };
+    return r.t;
+  }
+  pruneCandles3m(before: number): void {
+    this.db.prepare('DELETE FROM candles_3m WHERE time < ?').run(before);
+  }
+
+  /** Sum of net P&L of trades closed in [from, to) in the given mode (daily loss stop). */
+  realisedNet(from: number, to: number, dryRun: boolean): number {
+    const r = this.db
+      .prepare("SELECT COALESCE(SUM(net_pnl), 0) AS s FROM trades WHERE status = 'CLOSED' AND exit_time >= ? AND exit_time < ? AND dry_run = ?")
+      .get(from, to, dryRun ? 1 : 0) as { s: number };
+    return r.s;
+  }
 
   // ---------- kv ----------
   kvGet(key: string): string | null {

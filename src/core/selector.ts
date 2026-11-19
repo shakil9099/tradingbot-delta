@@ -1,16 +1,16 @@
 // Strategy Selection Contract, rules 1–5. Pure: the caller writes the strategy_switch event (rule 6).
 
-import type { Side, Signal, StrategyId } from '../shared/types.js';
+import type { ScoredStrategy, Side, Signal, StrategyId } from '../shared/types.js';
 
 export interface SelectInput {
-  scores: Record<StrategyId, number>;
-  counts: Record<StrategyId, number>;
+  scores: Record<ScoredStrategy, number>;
+  counts: Record<ScoredStrategy, number>;
   active: StrategyId;
   pending: StrategyId | null;
   isFlat: boolean;
   positionSide: Side | null;
-  signals: Record<StrategyId, Signal>;
-  /** Set when STRATEGY=hull|ut; bypasses the selector. */
+  signals: Record<ScoredStrategy, Signal>;
+  /** Set when STRATEGY=hull|ut|reversal; bypasses the selector. */
   override: StrategyId | null;
 }
 
@@ -27,7 +27,8 @@ export interface SelectParams {
 }
 
 const EPS = 1e-9;
-const other = (s: StrategyId): StrategyId => (s === 'hull' ? 'ut' : 'hull');
+const other = (s: ScoredStrategy): ScoredStrategy => (s === 'hull' ? 'ut' : 'hull');
+const isScored = (s: StrategyId): s is ScoredStrategy => s === 'hull' || s === 'ut';
 const fmt = (n: number) => n.toFixed(2);
 
 export function select(input: SelectInput, p: SelectParams): SelectResult {
@@ -38,7 +39,11 @@ export function select(input: SelectInput, p: SelectParams): SelectResult {
     return { active: override, pending: null, switched: override !== active, reason: `override STRATEGY=${override}` };
   }
 
-  // Rule 1: cold start.
+  // Rule 1: cold start. Also when the stored active strategy is one adaptive does not score (e.g. back from
+  // STRATEGY=reversal), otherwise it would never lose its place.
+  if (!isScored(active)) {
+    return { active: 'hull', pending: null, switched: true, reason: `cold start (${active} is not scored by adaptive)` };
+  }
   if (counts.hull < p.SEL_N || counts.ut < p.SEL_N) {
     return {
       active: 'hull',
@@ -51,7 +56,7 @@ export function select(input: SelectInput, p: SelectParams): SelectResult {
   // Rule 2: pending when the other strategy leads by at least SEL_MARGIN.
   const candidate = other(active);
   const leads = scores[candidate] >= scores[active] + p.SEL_MARGIN - EPS;
-  const pending: StrategyId | null = leads ? candidate : null;
+  const pending: ScoredStrategy | null = leads ? candidate : null;
   const leadText = `${candidate} ${fmt(scores[candidate])} vs ${active} ${fmt(scores[active])}`;
 
   if (!pending) return { active, pending: null, switched: false, reason: 'no lead' };

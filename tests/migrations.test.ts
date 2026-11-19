@@ -27,6 +27,6 @@ describe('migrations', () => {
     const db = new Database(':memory:');
     migrate(db);
     migrate(db);
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
   });
 });

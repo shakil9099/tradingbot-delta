@@ -54,3 +54,46 @@ export function decide(input: DecideInput): Decision {
   // mismatch, fatal_error (and liquidation, which should only occur flat): leave the bracket alone.
   return { action: 'NONE', reason: `halted (${haltKind ?? 'unknown'}); author decides` };
 }
+
+export interface DecideRevAAInput {
+  halted: boolean;
+  haltKind: HaltKind | null;
+  position: { side: Side } | null;
+  /** Reversal signal on the newest closed bar. */
+  revSignal: Signal;
+  /** AlgoAlpha break on the newest closed bar; null = AlgoAlpha unavailable (3m data). */
+  aaBreak: 1 | -1 | 0 | null;
+  /** Why a new position may not be opened now (entry gate, daily loss stop, AlgoAlpha unavailable); null = allowed. */
+  entryBlock: string | null;
+}
+
+/**
+ * STRATEGY=revaa (design_draft.md §3): enter on a reversal signal; exit on an opposite AlgoAlpha break (reverse if the
+ * same bar also has an opposite reversal signal and entries are allowed). An opposite reversal signal alone is ignored.
+ * CLOSE and the close leg of REVERSE use exit reason 'aa_break'. Halts behave as in decide().
+ */
+export function decideRevAA(input: DecideRevAAInput): Decision {
+  const { halted, haltKind, position, revSignal, aaBreak, entryBlock } = input;
+  const sigSide = signalSide(revSignal);
+
+  if (!position) {
+    if (halted) return { action: 'NONE', reason: 'halted' };
+    if (!sigSide) return { action: 'NONE', reason: 'no signal' };
+    if (entryBlock) return { action: 'NONE', reason: `reversal ${revSignal} not taken: ${entryBlock}` };
+    return { action: 'ENTER', side: sigSide, reason: 'reversal signal' };
+  }
+
+  const aaSide: Side | null = aaBreak === 1 ? 'buy' : aaBreak === -1 ? 'sell' : null;
+  const aaOpp = aaSide !== null && aaSide !== position.side;
+  const revOpp = sigSide !== null && sigSide !== position.side;
+  const unavailable = aaBreak === null ? '; AlgoAlpha unavailable, aa_break exit not checked' : '';
+
+  if (halted && !(haltKind && PROTECTING_KINDS.has(haltKind))) return { action: 'NONE', reason: `halted (${haltKind ?? 'unknown'}); author decides` };
+  const pre = halted ? `halted (${haltKind}); ` : '';
+  if (aaOpp) {
+    if (!halted && revOpp && !entryBlock) return { action: 'REVERSE', side: opposite(position.side), reason: 'aa break + reversal signal' };
+    const why = !halted && revOpp && entryBlock ? `; reverse blocked: ${entryBlock}` : '';
+    return { action: 'CLOSE', reason: `${pre}aa break${why}` };
+  }
+  return { action: 'TRAIL', reason: `${pre}in position${revOpp ? '; opposite reversal signal ignored' : ''}${unavailable}` };
+}

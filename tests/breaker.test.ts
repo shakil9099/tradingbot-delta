@@ -23,4 +23,8 @@ describe('breaker', () => {
   it('external leaves the count unchanged, even when profitable', () => {
     expect(nextCount(2, 'external', 50)).toBe(2);
   });
+  it('BREAKER_N 0 turns the breaker off', () => {
+    expect(shouldHalt(3, 0)).toBe(false);
+    expect(shouldHalt(50, 0)).toBe(false);
+  });
 });

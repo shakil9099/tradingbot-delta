@@ -825,4 +825,65 @@ code {
   .row {
     grid-template-columns: 1fr;
   }
+  .kpi-wide {
+    grid-column: 1 / -1;
+  }
+  /* Wide tables marked .stack become one card per row: label on the left, value on the right. */
+  .scroll:has(> table.stack) {
+    overflow-x: visible;
+    margin: 0;
+    padding: 0;
+  }
+  table.stack thead {
+    display: none;
+  }
+  table.stack,
+  table.stack tbody,
+  table.stack tr,
+  table.stack td {
+    display: block;
+    width: 100%;
+  }
+  table.stack tr {
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    margin-bottom: 10px;
+  }
+  table.stack td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    white-space: normal;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+  table.stack td:last-child {
+    border-bottom: 0;
+  }
+  table.stack td::before {
+    content: attr(data-label);
+    color: var(--faint);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  dl.kv {
+    gap: 8px 14px;
+  }
+}
+
+/* Options: open-trade details and dry runs */
+dl.kv {
+  margin-bottom: 14px;
+}
+.dry-run {
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
 }

@@ -11,6 +11,10 @@ export class FakeExchange implements ExchangePort {
   orders: Order[] = [];
   fills: Fill[] = [];
   candles: Candle[] = [];
+  /** 3-minute candles served for resolution '3m'. */
+  candles3m: Candle[] = [];
+  /** Requests seen, e.g. '3m 1700000000 1700359820' (for asserting fetch windows). */
+  candleCalls: string[] = [];
   product: Product = { id: 3136, symbol: 'ETHUSD', contractValue: 0.01, tickSize: 0.05 };
   marginModes: MarginMode[] = ['isolated'];
   calls: string[] = [];
@@ -18,7 +22,7 @@ export class FakeExchange implements ExchangePort {
   failNext = new Map<string, Error[]>();
   /** If false, market orders are accepted but never fill. */
   fills_on_place = true;
-  /** editBracket accepted but does not move the stop (not an in-place edit). */
+  /** editBracket and editOrderStop accepted but do not move the stop (not an in-place edit). */
   editIsNoop = false;
   /** placeBracket silently does nothing. */
   placeBracketNoop = false;
@@ -67,9 +71,11 @@ export class FakeExchange implements ExchangePort {
     this.orders = [];
   }
 
-  async getCandles(start: number, end: number): Promise<Candle[]> {
-    this.maybeFail('getCandles');
-    return this.candles.filter((c) => c.time >= start && c.time <= end);
+  async getCandles(start: number, end: number, resolution: '1h' | '3m' = '1h'): Promise<Candle[]> {
+    this.maybeFail(resolution === '3m' ? 'getCandles3m' : 'getCandles');
+    this.candleCalls.push(`${resolution} ${start} ${end}`);
+    const src = resolution === '3m' ? this.candles3m : this.candles;
+    return src.filter((c) => c.time >= start && c.time <= end).slice(0, 2000);
   }
   async getTicker(): Promise<Ticker> {
     this.maybeFail('getTicker');
@@ -132,6 +138,13 @@ export class FakeExchange implements ExchangePort {
       const tp = this.tp();
       if (tp) tp.stopPrice = req.takeProfit;
     }
+  }
+  async editOrderStop(id: string, stopPrice: number): Promise<void> {
+    this.maybeFail('editOrderStop');
+    if (this.editIsNoop) return;
+    const o = this.orders.find((x) => x.id === id);
+    if (!o) throw new ExchangeError(`order ${id} not found`, 'fatal');
+    o.stopPrice = stopPrice;
   }
   async placeBracket(req: BracketReq): Promise<void> {
     this.maybeFail('placeBracket');

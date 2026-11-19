@@ -63,14 +63,14 @@ const status = () => ({
   position, slPrice: position ? 2066.5 : null, tpPrice: null, stage: position ? 1 : null, unrealizedPnl: position ? 0.18 : null, balance: 176.73,
   halted, haltReason: halted ? 'paused from the dashboard' : null, haltKind: halted ? 'manual' : null, consecutiveSl: 0, active: 'hull', pending: null,
   scores: { hull: 43.22, ut: 205.06 }, lastSwitchReason: 'override STRATEGY=hull', dryRun: false, paramsHash: '5363ce3e1bf1', nextCycleAt: Math.ceil(now() / H) * H + 10,
-  risk: { perTrade: 0.2, reduced: 0.05, reduceBelowPeak: 0.2, peak: 176.73, drawdown: 0, current: 0.2 },
+  risk: { fixedContracts: 0, perTrade: 0.2, reduced: 0.05, reduceBelowPeak: 0.2, peak: 176.73, drawdown: 0, current: 0.2 },
   strategyMode: 'hull', atrGateMax: 0, minAtr: 15, skipWeekendEntries: true, snapshotAt: now(), health: { ok: !halted, reason: halted ? 'halted (manual)' : undefined },
 });
 
 const settings = () => ({
   mode: 'live', requestedMode: 'live', envLock: false, secretsKeyConfigured: true, credentialsSource: 'auto',
   credentials: { source: 'stored', stored: 'ok', unreadableReason: null, keyLast4: 'a1b2', savedAt: now() - 31 * H, verifiedAt: now() - 30 * H },
-  isolatedConfirmed: true, flat: !position, halted, risk: 0.2, riskReduced: 0.05,
+  isolatedConfirmed: true, flat: !position, halted, risk: 0.2, riskReduced: 0.05, fixedContracts: 0,
 });
 
 const routes = {
@@ -87,6 +87,27 @@ const routes = {
   'GET /api/decisions': () => [200, { decisions }],
   'GET /api/events': () => [200, { events }],
   'GET /api/settings': () => [200, settings()],
+  // Options bot (NIFTY / BANKNIFTY): an open candle-mode trade, a dry run after a manual close, and trades.
+  'GET /api/nifty/status': () => [200, {
+    live: true, killed: false, lastTickAt: now() - 2, lastError: null,
+    strategy: { rangeMin: 30, trendFilter: true, stopK: 1.5, rr: 3, itm: 2, entryWindow: '09:45–12:00', timeExit: '15:05', exitMode: 'candle', exitPreset: null, maxTradesPerDay: 1, optStopPct: 0.3, optCostAtPct: 0.4, optTpPct: 1.2, haExitMinPct: 0.1 },
+    indices: [
+      { name: 'NIFTY', enabled: true, lots: 1, lotSize: 65, lossFloor: 5000, spot: 25366.2, paused: false, halted: null, doneToday: true, tradesToday: 1, netToday: 0, netSinceResume: -469.85, lastSignal: '09:50 LONG → buy CE', entering: null,
+        position: { symbol: 'NIFTY23NOV2625250CE', side: 1, qty: 65, entryPrice: 274.75, spotIn: 25366.2, stopLevel: 25281.47, targetLevel: 1e9, slTrigger: 219.8, ltp: 288.4, unrealised: 887.25, exiting: null,
+          exitView: { mode: 'candle', stage: 'COST', stop: 276.05, emergency: 233.5, costTrigger: 302.23, gate: 289.85, pending: null } },
+        dryRuns: [] },
+      { name: 'BANKNIFTY', enabled: true, lots: 1, lotSize: 30, lossFloor: 5000, spot: 61937.65, paused: false, halted: null, doneToday: true, tradesToday: 1, netToday: 1241.49, netSinceResume: 4001.07, lastSignal: '09:50 LONG → buy CE', entering: null, position: null,
+        dryRuns: [{ tag: 'B261117E89206', symbol: 'BANKNIFTY23NOV2661700CE', entryPrice: 608.5, closedPrice: 652.65, closedNet: 1241.49, ltp: 671.2, ifHeldNow: 1792.4 }] },
+    ],
+    trades: [
+      { tag: 'N261117E89216', index: 'NIFTY', day: '2026-11-17', symbol: 'NIFTY23NOV2625250CE', side: 1, qty: 65, entryPrice: 274.75, exitPrice: 268.75, entryTime: now() - 30 * H, exitTime: now() - 29 * H, reason: 'closed outside the bot', charges: 79.85, net: -469.85,
+        whatIf: { tag: 'N261117E89216', exitPrice: 302.1, exitTime: now() - 26 * H, reason: 'target', net: 1695.3, diff: 2165.15 } },
+      { tag: 'B261116E02826', index: 'BANKNIFTY', day: '2026-11-16', symbol: 'BANKNIFTY23NOV2661400CE', side: 1, qty: 30, entryPrice: 595.2, exitPrice: 690, entryTime: now() - 50 * H, exitTime: now() - 49 * H, reason: 'closed outside the bot', charges: 84.42, net: 2759.58,
+        whatIf: { tag: 'B261116E02826', exitPrice: 640.5, exitTime: now() - 45 * H, reason: 'time exit 15:05', net: 1272.9, diff: -1486.68 } },
+      { index: 'NIFTY', day: '2026-11-13', symbol: 'NIFTY17NOV2625100PE', side: -1, qty: 65, entryPrice: 182.3, exitPrice: 168.1, entryTime: now() - 120 * H, exitTime: now() - 119 * H, reason: 'stop', charges: 72.1, net: -995.1, whatIf: null },
+    ],
+  }],
+  'POST /api/nifty/control': () => [200, { ok: true }],
   'POST /api/control/pause': () => ((halted = true), [200, { ok: true }]),
   'POST /api/control/resume': () => ((halted = false), [200, { ok: true }]),
   'POST /api/control/close': () => ((position = null), [200, { ok: true }]),

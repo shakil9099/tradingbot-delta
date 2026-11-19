@@ -80,12 +80,21 @@ export default function Overview() {
                 <dd>{s.lastSwitchReason ?? '—'}</dd>
               </>
             )}
-            <dt>Risk per trade</dt>
+            <dt>{s.risk.fixedContracts > 0 ? 'Trade size' : 'Risk per trade'}</dt>
             <dd>
-              {s.risk.current === null ? '—' : `${(s.risk.current * 100).toFixed(0)}%`}
-              {s.risk.drawdown !== null && s.risk.drawdown > s.risk.reduceBelowPeak ? (
-                <span className="muted"> (reduced: {(s.risk.drawdown * 100).toFixed(0)}% below peak)</span>
-              ) : null}
+              {s.risk.fixedContracts > 0 ? (
+                <>
+                  fixed {s.risk.fixedContracts} ct ({(s.risk.fixedContracts / 100).toFixed(2)} ETH)
+                  <span className="muted"> (smaller only if margin can't cover it)</span>
+                </>
+              ) : (
+                <>
+                  {s.risk.current === null ? '—' : `${(s.risk.current * 100).toFixed(0)}%`}
+                  {s.risk.drawdown !== null && s.risk.drawdown > s.risk.reduceBelowPeak ? (
+                    <span className="muted"> (reduced: {(s.risk.drawdown * 100).toFixed(0)}% below peak)</span>
+                  ) : null}
+                </>
+              )}
             </dd>
             <dt>Low-volatility skip</dt>
             <dd>{s.minAtr > 0 ? `no entries when ATR(14) < $${s.minAtr}` : 'off'}</dd>

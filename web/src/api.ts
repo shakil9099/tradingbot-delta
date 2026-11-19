@@ -43,6 +43,7 @@ export interface Settings {
   halted: boolean;
   risk: number;
   riskReduced: number;
+  fixedContracts: number;
 }
 
 export const api = {

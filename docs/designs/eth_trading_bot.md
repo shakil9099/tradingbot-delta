@@ -685,7 +685,7 @@ Read-only calls (candles, balance, product) still go to Delta.
 
 ## Alternatives Considered
 
-Decisions credited to the author are recorded in [concepts_brief.md](../../concepts_brief.md#alternatives-weighed), under "Alternatives Weighed" and "Resolved in iteration 2". "Decided in design" means the author gave no input and the choice follows from a stated constraint.
+Decisions credited to the author are recorded in [concepts_brief_eth.md](concepts_brief_eth.md#alternatives-weighed), under "Alternatives Weighed" and "Resolved in iteration 2". "Decided in design" means the author gave no input and the choice follows from a stated constraint.
 
 ### Alternative A: TradingView webhook signals
 
@@ -698,7 +698,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
     *   Adds an external service that can drop alerts.
     *   The alerts in `bot.pine` fire on unclosed bars (`alert.freq_once_per_bar`), so they repaint.
     *   The bot still needs Delta candles to trail on closes and to score strategies.
-*   **Reason for Rejection:** The bot needs Delta candles anyway, so webhooks add a paid dependency and repainting alerts while removing no code. Decided by author ([brief](../../concepts_brief.md#alternatives-weighed)).
+*   **Reason for Rejection:** The bot needs Delta candles anyway, so webhooks add a paid dependency and repainting alerts while removing no code. Decided by author ([brief](concepts_brief_eth.md#alternatives-weighed)).
 
 ### Alternative B: Webhook plus internal signals
 
@@ -707,7 +707,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **Cons:**
     *   It needs a rule for resolving disagreements.
     *   It carries the failure modes of both paths.
-*   **Reason for Rejection:** Cross-checking does not justify a second signal path plus a rule for resolving disagreements. Decided by author ([brief](../../concepts_brief.md#alternatives-weighed)).
+*   **Reason for Rejection:** Cross-checking does not justify a second signal path plus a rule for resolving disagreements. Decided by author ([brief](concepts_brief_eth.md#alternatives-weighed)).
 
 ### Alternative C: Market-regime filter to choose Hull or UT Bot
 
@@ -718,7 +718,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **Cons:**
     *   Adds a threshold parameter that needs its own tuning.
     *   Regime indicators lag.
-*   **Reason for Rejection:** The author preferred to choose by measured recent results over a new threshold that would need tuning. Decided by author ([brief](../../concepts_brief.md#alternatives-weighed)). The selector carries the same tuning risk (N=10, a $20 margin), which is why the backtest compares it with fixed strategies.
+*   **Reason for Rejection:** The author preferred to choose by measured recent results over a new threshold that would need tuning. Decided by author ([brief](concepts_brief_eth.md#alternatives-weighed)). The selector carries the same tuning risk (N=10, a $20 margin), which is why the backtest compares it with fixed strategies.
 
 ### Alternative D: Take either signal (OR) or require both (AND)
 
@@ -727,7 +727,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **Cons:**
     *   OR takes every signal from both strategies, so the most false signals and reversals.
     *   AND fires only when both agree, so it enters late and rarely.
-*   **Reason for Rejection:** Both options either multiply false signals or drop most trades. The author's stated goal is to use whichever strategy is working ("no need to combine both conditions"). Decided by author ([brief](../../concepts_brief.md#alternatives-weighed)).
+*   **Reason for Rejection:** Both options either multiply false signals or drop most trades. The author's stated goal is to use whichever strategy is working ("no need to combine both conditions"). Decided by author ([brief](concepts_brief_eth.md#alternatives-weighed)).
 
 ### Alternative E: Ship one fixed strategy first and add adaptive selection later
 
@@ -736,7 +736,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
     *   Less code.
     *   A 10-trade score is noisy, so the selector may not beat a fixed choice.
 *   **Cons:** The author would have to pick by hand, which is the problem being solved.
-*   **Reason for Rejection:** Kept as a fallback rather than the default. `STRATEGY=hull|ut` is one setting away. Decided by author ([brief](../../concepts_brief.md#key-decisions--staging-for-next-steps)). **Reversed if** `npm run backtest` shows adaptive trailing the best fixed strategy: the author then sets `STRATEGY` to that strategy.
+*   **Reason for Rejection:** Kept as a fallback rather than the default. `STRATEGY=hull|ut` is one setting away. Decided by author ([brief](concepts_brief_eth.md#key-decisions--staging-for-next-steps)). **Reversed if** `npm run backtest` shows adaptive trailing the best fixed strategy: the author then sets `STRATEGY` to that strategy.
 
 ### Alternative F: Ignore opposite signals while in a trade
 
@@ -745,7 +745,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
     *   No two-step reversal, so no window of up to about 20 s.
     *   Half the fees on signal changes.
 *   **Cons:** The bot stays in a trade its own signal says is wrong, until the stop or target fires.
-*   **Reason for Rejection:** The author accepts the reversal window and the extra fees in exchange for exiting as soon as the signal turns. Decided by author ([brief](../../concepts_brief.md#key-decisions--staging-for-next-steps)).
+*   **Reason for Rejection:** The author accepts the reversal window and the extra fees in exchange for exiting as soon as the signal turns. Decided by author ([brief](concepts_brief_eth.md#key-decisions--staging-for-next-steps)).
 
 ### Alternative G: Whole-ETH sizing
 
@@ -754,14 +754,14 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **Cons:**
     *   Up to $140 of the balance is unused.
     *   A balance under $141 cannot trade.
-*   **Reason for Rejection:** Sizing in 0.01 ETH steps (one contract) uses the whole balance at no extra complexity. Decided by author ([brief](../../concepts_brief.md#key-decisions--staging-for-next-steps)).
+*   **Reason for Rejection:** Sizing in 0.01 ETH steps (one contract) uses the whole balance at no extra complexity. Decided by author ([brief](concepts_brief_eth.md#key-decisions--staging-for-next-steps)).
 
 ### Alternative H: Risk-based sizing
 
 *   **How it works:** `qty = equity × risk% / (SL + fees)`.
 *   **Pros:** Caps the loss per stop at a chosen share of the account.
 *   **Cons:** At 2% risk, positions are about 7 times smaller than under the author's rule.
-*   **Reason for Rejection:** The author prefers the larger position and accepts about 14–16% of the account lost per stop. The margin cap and the breaker are the safety limits. Decided by author ([brief](../../concepts_brief.md#key-decisions--staging-for-next-steps)).
+*   **Reason for Rejection:** The author prefers the larger position and accepts about 14–16% of the account lost per stop. The margin cap and the breaker are the safety limits. Decided by author ([brief](concepts_brief_eth.md#key-decisions--staging-for-next-steps)).
 
 ### Alternative I: Testnet before live
 
@@ -770,7 +770,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **Cons:**
     *   Testnet fills and liquidity differ from live.
     *   It delays going live.
-*   **Reason for Rejection:** The author chose to go live directly. `DRY_RUN` and `MAX_CONTRACTS=1` are provided as optional first steps. Decided by author ([brief](../../concepts_brief.md#alternatives-weighed)).
+*   **Reason for Rejection:** The author chose to go live directly. `DRY_RUN` and `MAX_CONTRACTS=1` are provided as optional first steps. Decided by author ([brief](concepts_brief_eth.md#alternatives-weighed)).
 
 ### Alternative J: Bot-managed stop instead of an exchange bracket
 
@@ -793,7 +793,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **How it works:** SL = highest high − $10 (lowest low + $10 for shorts).
 *   **Pros:** Locks in more profit.
 *   **Cons:** A single wick pulls the stop to within $10 of the extreme, so normal pullbacks stop the trade out.
-*   **Reason for Rejection:** Trailing from the close ignores wicks, so a pullback inside one bar does not end the trade. Decided by author ([brief](../../concepts_brief.md#key-decisions--staging-for-next-steps)).
+*   **Reason for Rejection:** Trailing from the close ignores wicks, so a pullback inside one bar does not end the trade. Decided by author ([brief](concepts_brief_eth.md#key-decisions--staging-for-next-steps)).
 
 ### Alternative M: Dashboard as static HTML or server-rendered pages
 
@@ -813,7 +813,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **Cons:**
     *   The tunnel is awkward to use from a phone.
     *   The public page leaks trades and balance, and cannot offer controls.
-*   **Reason for Rejection:** A password login over HTTPS works from a phone and allows controls. The SSH path remains as `npm run ctl` for recovery. Decided by author ([brief](../../concepts_brief.md#alternatives-weighed)).
+*   **Reason for Rejection:** A password login over HTTPS works from a phone and allows controls. The SSH path remains as `npm run ctl` for recovery. Decided by author ([brief](concepts_brief_eth.md#alternatives-weighed)).
 
 ### Alternative O: Claude-API trade review
 
@@ -822,7 +822,7 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 *   **Cons:**
     *   Costs money per call and needs an API key.
     *   The output differs from run to run.
-*   **Reason for Rejection:** Fixed rules cost nothing and give the same answer every time, so changes are comparable over time. Decided by author ([brief](../../concepts_brief.md#alternatives-weighed)).
+*   **Reason for Rejection:** Fixed rules cost nothing and give the same answer every time, so changes are comparable over time. Decided by author ([brief](concepts_brief_eth.md#alternatives-weighed)).
 
 ### Alternative P: Edit `bot.pine` in place
 
@@ -890,8 +890,8 @@ Decisions credited to the author are recorded in [concepts_brief.md](../../conce
 
 ## Additional Resources
 
-*   [`egm_context_delta_api.md`](../../egm_context_delta_api.md): Delta India API facts used in this design.
-*   [`concepts_brief.md`](../../concepts_brief.md): the brainstorm brief, including the decisions and the alternatives the author rejected.
+*   [`delta_api_context.md`](delta_api_context.md): Delta India API facts used in this design.
+*   [`concepts_brief_eth.md`](concepts_brief_eth.md): the brainstorm brief, including the decisions and the alternatives the author rejected.
 *   [`bot.pine`](../../bot.pine): source of the UT Bot (lines 919–995) and Hull (lines 997–1032) logic.
 *   [Delta Exchange API docs](https://docs.delta.exchange/): the REST reference for Delta Exchange India.
 

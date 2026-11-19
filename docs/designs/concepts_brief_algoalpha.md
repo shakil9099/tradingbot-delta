@@ -3,7 +3,7 @@
 * **Author:** Shakil Dodhiya
 * **Date:** 2026-11-14
 
-(The previous brief in this file, for the NIFTY options bot, is kept at `docs/designs/concepts_brief_nifty_options.md`.)
+(The previous brief in this file, for the NIFTY options bot, is kept at `concepts_brief_nifty_options.md`.)
 
 ## Overview
 

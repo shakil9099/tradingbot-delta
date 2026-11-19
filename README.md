@@ -200,10 +200,10 @@ Data: Delta ETHUSD 1h, Feb 2024 – Nov 2026, after fees with GST and 1 tick of 
 
 ## TradingView
 
-[`eth_strategy.pine`](eth_strategy.pine) is **out of date**: it still shows the original $20 ladder. The bot does not depend on it, so use it only to view the Hull and UT signals. [`bot.pine`](bot.pine) is unchanged.
+[`eth_strategy.pine`](pine/eth_strategy.pine) is **out of date**: it still shows the original $20 ladder. The bot does not depend on it, so use it only to view the Hull and UT signals. [`bot.pine`](pine/bot.pine) is unchanged.
 
 **Golden test (indicator parity):**
-1. Add `eth_strategy.pine` to any ETHUSD perpetual 1h chart.
+1. Add `pine/eth_strategy.pine` to any ETHUSD perpetual 1h chart.
 2. Export about 700 bars with the `Hull` and `UT stop` plots.
 3. Save them as `tests/fixtures/eth_1h_golden.csv` with columns `time,open,high,low,close,hull,ut_stop`.
 

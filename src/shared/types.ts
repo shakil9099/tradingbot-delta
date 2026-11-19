@@ -12,7 +12,10 @@ export interface Candle {
   volume: number;
 }
 
-export type StrategyId = 'hull' | 'ut';
+/** 'revaa' = reversal entry → AlgoAlpha break exit (design_draft.md, 2026-11-20). */
+export type StrategyId = 'hull' | 'ut' | 'reversal' | 'revaa';
+/** Strategies the adaptive selector scores and chooses between. */
+export type ScoredStrategy = 'hull' | 'ut';
 /** Strategy recorded on a trade; adopted trades are 'unknown'. */
 export type TradeStrategy = StrategyId | 'unknown';
 
@@ -29,6 +32,7 @@ export type ExitReason =
   | 'sl_stage_2'
   | 'tp'
   | 'reversal'
+  | 'aa_break'
   | 'manual'
   | 'trail_breached'
   | 'margin_mode'
@@ -178,11 +182,12 @@ export interface StatusResponse {
   consecutiveSl: number;
   active: StrategyId;
   pending: StrategyId | null;
-  scores: Record<StrategyId, number>;
+  scores: Record<ScoredStrategy, number>;
   lastSwitchReason: string | null;
   dryRun: boolean;
   paramsHash: string;
   nextCycleAt: number | null;
   /** Risk throttle (design Amendment A.4). */
-  risk: { perTrade: number; reduced: number; reduceBelowPeak: number; peak: number | null; drawdown: number | null; current: number | null };
+  /** fixedContracts > 0: every entry uses that size (capped by margin), and the risk fields do not set the size. */
+  risk: { fixedContracts: number; perTrade: number; reduced: number; reduceBelowPeak: number; peak: number | null; drawdown: number | null; current: number | null };
 }

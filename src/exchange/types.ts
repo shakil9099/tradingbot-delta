@@ -1,5 +1,7 @@
 import type { Candle, Side } from '../shared/types.js';
 
+export type CandleResolution = '1h' | '3m';
+
 export interface Ticker {
   close: number;
   markPrice: number;
@@ -55,13 +57,16 @@ export interface PlaceOrderReq {
 export interface BracketReq {
   stopLoss?: number;
   takeProfit?: number;
+  /** Order id for PUT /v2/orders/bracket (Delta rejects the edit without it: "id is required"). */
+  id?: string;
 }
 
 export type MarginMode = 'isolated' | 'cross' | 'unknown';
 
 /** Everything the bot needs from an exchange. deltaClient, paperBroker and the test fake implement it. */
 export interface ExchangePort {
-  getCandles(start: number, end: number): Promise<Candle[]>;
+  /** Candles whose open time is in [start, end] (unix s). resolution defaults to '1h'. At most 2,000 per call. */
+  getCandles(start: number, end: number, resolution?: CandleResolution): Promise<Candle[]>;
   getTicker(): Promise<Ticker>;
   getPosition(): Promise<Position | null>;
   getMarginMode(): Promise<MarginMode>;
@@ -71,6 +76,8 @@ export interface ExchangePort {
   setLeverage(n: number): Promise<void>;
   placeOrder(req: PlaceOrderReq): Promise<Order>;
   editBracket(req: BracketReq): Promise<void>;
+  /** Moves the trigger price of an existing stop-loss or take-profit order, by order id. */
+  editOrderStop(id: string, stopPrice: number): Promise<void>;
   placeBracket(req: BracketReq): Promise<void>;
   cancelOrder(id: string): Promise<void>;
   cancelAll(): Promise<void>;

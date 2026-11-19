@@ -1,0 +1,159 @@
+//@version=5
+indicator("Reversal Detection v3.0 Clone [Buy/Sell] - Current Bar Close", overlay=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500)
+
+// -----------------------------------------------------------------------------
+// INPUTS & SETTINGS
+// -----------------------------------------------------------------------------
+grp_sens = "Sensitivity"
+preset   = input.string("Medium", "Sensitivity Preset", options=["Very High", "High", "Medium", "Low", "Very Low"], group=grp_sens)
+mult_usr = input.float(0.0, "Custom ATR Multiplier (if > 0 overrides preset)", minval=0.0, step=0.1, group=grp_sens)
+
+// Internal Multiplier Logic based on Preset
+var float mult_base = 2.0
+if barstate.isfirst
+    mult_base := switch preset
+        "Very High" => 0.8
+        "High"      => 1.2
+        "Medium"    => 2.0
+        "Low"       => 2.8
+        "Very Low"  => 3.5
+        => 2.0
+// Use custom if provided, otherwise preset
+final_mult = mult_usr > 0 ? mult_usr : mult_base
+
+atr_len    = input.int(14, "ATR Length", group=grp_sens)
+min_perc   = input.float(0.1, "Min % Movement", minval=0.0, step=0.1, group=grp_sens) / 100
+
+grp_trend = "Trend Filter (EMAs)"
+ema1_len  = input.int(9, "EMA 1 Length", group=grp_trend)
+ema2_len  = input.int(14, "EMA 2 Length", group=grp_trend)
+ema3_len  = input.int(21, "EMA 3 Length", group=grp_trend)
+
+grp_vis = "Visuals"
+show_zones = input.bool(true, "Show Supply/Demand Zones", group=grp_vis)
+show_lines = input.bool(true, "Show Horizontal Levels", group=grp_vis)
+show_labels= input.bool(true, "Show Buy/Sell Labels", group=grp_vis)
+
+// -----------------------------------------------------------------------------
+// CALCULATIONS
+// -----------------------------------------------------------------------------
+// 1. Trend EMAs
+ema1 = ta.ema(close, ema1_len)
+ema2 = ta.ema(close, ema2_len)
+ema3 = ta.ema(close, ema3_len)
+
+is_bullish = close > ema1 and ema1 > ema2 and ema2 > ema3
+is_bearish = close < ema1 and ema1 < ema2 and ema2 < ema3
+
+// Candle Colors
+barcolor(is_bullish ? color.green : is_bearish ? color.red : color.purple)
+
+// 2. Adaptive Threshold
+atr_val = ta.atr(atr_len)
+threshold_atr = atr_val * final_mult
+threshold_pct = close * min_perc
+threshold     = math.max(threshold_atr, threshold_pct)
+
+// -----------------------------------------------------------------------------
+// ZIGZAG & REVERSAL LOGIC (Non-Repainting)
+// -----------------------------------------------------------------------------
+var int trend_dir = 0 
+var float last_pivot_price = close
+
+// Temporary extremes for the current developing leg
+var float leg_high = high
+var float leg_low = low
+var int leg_high_idx = 0
+var int leg_low_idx = 0
+
+if barstate.isfirst
+    trend_dir := 0
+    last_pivot_price := close
+    leg_high := high
+    leg_low := low
+    leg_high_idx := bar_index
+    leg_low_idx := bar_index
+
+if high > leg_high
+    leg_high := high
+    leg_high_idx := bar_index
+
+if low < leg_low
+    leg_low := low
+    leg_low_idx := bar_index
+
+bool buy_signal = false
+bool sell_signal = false
+
+if trend_dir == 0 
+    if close > last_pivot_price + threshold
+        trend_dir := 1
+        last_pivot_price := leg_low 
+        leg_low_idx := bar_index
+    else if close < last_pivot_price - threshold
+        trend_dir := -1
+        last_pivot_price := leg_high 
+        leg_high_idx := bar_index
+
+else if trend_dir == 1 
+    if close < leg_high - threshold
+        trend_dir := -1
+        sell_signal := true
+        
+        // Use the leg_high price, but tag visual drawings to the CURRENT bar_index
+        pivot_price = leg_high
+        
+        if show_zones
+            box.new(bar_index, pivot_price, bar_index + 10, pivot_price + (pivot_price*0.0005), border_color=color.red, bgcolor=color.new(color.red, 80))
+        if show_labels
+            label.new(bar_index, high, "SELL", color=color.red, style=label.style_label_down, textcolor=color.white)
+        if show_lines
+            line.new(bar_index, pivot_price, bar_index + 10, pivot_price, color=color.red)
+
+        last_pivot_price := leg_high
+        leg_low := low 
+        leg_low_idx := bar_index
+    else
+        if high > leg_high
+            leg_high := high
+            leg_high_idx := bar_index
+
+else if trend_dir == -1 
+    if close > leg_low + threshold
+        trend_dir := 1
+        buy_signal := true
+        
+        // Use the leg_low price, but tag visual drawings to the CURRENT bar_index
+        pivot_price = leg_low
+        
+        if show_zones
+            box.new(bar_index, pivot_price, bar_index + 10, pivot_price - (pivot_price*0.0005), border_color=color.green, bgcolor=color.new(color.green, 80))
+        if show_labels
+            label.new(bar_index, low, "BUY", color=color.green, style=label.style_label_up, textcolor=color.white)
+        if show_lines
+            line.new(bar_index, pivot_price, bar_index + 10, pivot_price, color=color.green)
+
+        last_pivot_price := leg_low
+        leg_high := high 
+        leg_high_idx := bar_index
+    else
+        if low < leg_low
+            leg_low := low
+            leg_low_idx := bar_index
+
+// -----------------------------------------------------------------------------
+// PLOTTING & ALERTS
+// -----------------------------------------------------------------------------
+plotshape(buy_signal, "Buy Confirmed", shape.triangleup, location.belowbar, color.green, size=size.small, title="Buy Signal")
+plotshape(sell_signal, "Sell Confirmed", shape.triangledown, location.abovebar, color.red, size=size.small, title="Sell Signal")
+
+alertcondition(buy_signal, "Buy Alert", "Bullish Reversal Confirmed")
+alertcondition(sell_signal, "Sell Alert", "Bearish Reversal Confirmed")
+
+// Info Table
+var table info_tbl = table.new(position.top_right, 2, 2, border_width=1)
+if barstate.islast
+    table.cell(info_tbl, 0, 0, "Trend", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_tbl, 1, 0, trend_dir == 1 ? "BULLISH" : "BEARISH", bgcolor=trend_dir == 1 ? color.green : color.red, text_color=color.white)
+    table.cell(info_tbl, 0, 1, "Sens", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_tbl, 1, 1, preset, bgcolor=color.gray, text_color=color.white)

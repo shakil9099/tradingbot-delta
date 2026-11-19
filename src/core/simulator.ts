@@ -9,7 +9,7 @@ import { decide } from './decide.js';
 import { atrPine } from './indicators.js';
 import { initialStops, nextStop, riskDistance, type ExitParams } from './exits.js';
 import { select } from './selector.js';
-import { direction, type IndicatorOutput } from './signals.js';
+import { direction, signalsFor, type IndicatorOutput } from './signals.js';
 
 export interface SimParams extends ExitParams {
   ATR_LEN: number;
@@ -183,7 +183,7 @@ export function simulateAdaptive(
   const allowUser = opts.allowEntryAt ?? (() => true);
   const allow = (t: number, side: Side) => riskDistance(atr[t], p) !== null && allowUser(t, side);
   const R = (t: number) => riskDistance(atr[t], p)!;
-  const hullTrades = simulate('hull', candles, ind.sigHull, p, o2).sort((a, b) => a.exitTime - b.exitTime);
+  const hullTrades = simulate('hull', candles, signalsFor('hull', ind), p, o2).sort((a, b) => a.exitTime - b.exitTime);
   const utTrades = simulate('ut', candles, ind.sigUt, p, o2).sort((a, b) => a.exitTime - b.exitTime);
   const book = new Book(p, atr);
   let active: StrategyId = 'hull';
@@ -224,7 +224,7 @@ export function simulateAdaptive(
       halted: false,
       haltKind: null,
       position: book.pos ? { side: book.pos.side } : null,
-      activeSignal: active === 'hull' ? ind.sigHull[t] : ind.sigUt[t],
+      activeSignal: signalsFor(active, ind)[t],
       activeDirection: direction(active, ind, t),
     });
     if (d.action === 'ENTER' && d.side) {

@@ -8,6 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { DEFAULT_PARAMS } from '../src/config/params.js';
 import { entryGate } from '../src/core/entryGate.js';
 import { atrPine, utTrailingStop } from '../src/core/indicators.js';
+import { algoAlpha } from '../src/core/algoAlpha.js';
 import { computeAll } from '../src/core/signals.js';
 import { simulate } from '../src/core/simulator.js';
 import { contractsFor, riskFor } from '../src/core/sizing.js';
@@ -71,84 +72,8 @@ const ltf: Candle[][] = c.map(() => []);
   }
 }
 
-// ---------- AlgoAlpha port ----------
-function rmaSeeded(x: number[], n: number) {
-  const out = new Array<number>(x.length).fill(NaN);
-  let s = 0, k = 0;
-  for (let i = 0; i < x.length; i++) {
-    if (Number.isNaN(x[i])) continue;
-    if (k < n) {
-      s += x[i];
-      k++;
-      if (k === n) out[i] = s / n;
-    } else out[i] = (out[i - 1] * (n - 1) + x[i]) / n;
-  }
-  return out;
-}
-const vol = c.map((b) => b.volume);
-const up = vol.map((v, i) => (i ? Math.max(v - vol[i - 1], 0) : NaN));
-const dn = vol.map((v, i) => (i ? Math.max(vol[i - 1] - v, 0) : NaN));
-const ru = rmaSeeded(up, 14);
-const rd = rmaSeeded(dn, 14);
-const volRsi = ru.map((u, i) => (rd[i] === 0 ? 100 : u === 0 ? 0 : 100 - 100 / (1 + u / rd[i])));
-const lw = c.map((b) => Math.min(b.close, b.open) - b.low);
-const uw = c.map((b) => b.high - Math.max(b.close, b.open));
-const aw = c.map((_, i) => (lw[i] + uw[i]) / 2);
-const awSma = aw.map((_, i) => (i < 20 ? NaN : aw.slice(i - 20, i + 1).reduce((a, b) => a + b, 0) / 21));
-
-function poc(top: number, bot: number, bars: Candle[], bins = 7): number {
-  if (!bars.length || top === bot) return NaN;
-  const seg = (top - bot) / bins;
-  const bounds = Array.from({ length: bins + 1 }, (_, k) => bot + k * seg);
-  const v = bounds.slice(0, -1).map((lo, k) => bars.reduce((a, x) => a + (x.close >= lo && x.close <= bounds[k + 1] ? x.volume : 0), 0));
-  const k = v.indexOf(Math.max(...v));
-  return (bounds[k] + bounds[k + 1]) / 2;
-}
-
-const brk = new Array<number>(c.length).fill(0); // +1 bullish break, −1 bearish break at this bar
-const trend = new Array<number>(c.length).fill(0);
-const bullRej = new Array<boolean>(c.length).fill(false);
-const bearRej = new Array<boolean>(c.length).fill(false);
-{
-  type Lvl = { price: number; typ: Dir; born: number; vol: number };
-  let lv: Lvl[] = []; // index 0 = newest (array.unshift)
-  let tr = 0;
-  for (let i = 1; i < c.length; i++) {
-    const b = c[i];
-    const hl = (aw[i] > awSma[i] * 2) && volRsi[i] > 60 && uw[i] !== lw[i];
-    if (hl) {
-      const red = lw[i] > uw[i];
-      const top = red ? Math.min(b.close, b.open) : b.high;
-      const bot = red ? b.low : Math.max(b.close, b.open);
-      const p = poc(top, bot, ltf[i]);
-      if (!Number.isNaN(p)) {
-        lv.unshift({ price: p, typ: red ? -1 : 1, born: i, vol: b.volume });
-        if (lv.length > 500) lv.pop();
-      }
-    }
-    let br = 0;
-    const keep: Lvl[] = [];
-    for (let k = lv.length - 1; k >= 0; k--) {
-      const l = lv[k];
-      const done = l.typ === 1 ? b.close > l.price && c[i - 1].close > l.price : b.close < l.price && c[i - 1].close < l.price;
-      if (done) {
-        br = l.typ;
-        tr = l.typ;
-        continue;
-      }
-      // Pine: x2 − x1 > 0 is true from the second bar after creation.
-      if (i - l.born >= 2 && c[i - 1].high > l.price && c[i - 1].low < l.price) {
-        const hl2 = (b.high + b.low) / 2;
-        if (hl2 > l.price && l.typ === -1) bullRej[i] = true;
-        else if (hl2 < l.price && l.typ === 1) bearRej[i] = true;
-      }
-      keep.unshift(l);
-    }
-    lv = keep;
-    brk[i] = br;
-    trend[i] = tr;
-  }
-}
+// ---------- AlgoAlpha (src/core/algoAlpha.ts) ----------
+const { brk, trend, bullRej, bearRej } = algoAlpha(c, ltf);
 
 // ---------- shared pieces ----------
 const close = c.map((x) => x.close);

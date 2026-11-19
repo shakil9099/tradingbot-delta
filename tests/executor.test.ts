@@ -26,6 +26,32 @@ describe('executor.enter (Strategy v2 sizing and stop)', () => {
     expect(repo.kvNum(peakKey(false))).toBe(300);
   });
 
+  it('FIXED_CONTRACTS=100: opens exactly 1 ETH whatever the risk setting, and records it', async () => {
+    const { fx, repo, exec } = makeEngine({ FIXED_CONTRACTS: 100 });
+    fx.price = 2000;
+    expect(await exec.enter('buy', H - 3600, reason, R)).toBe('opened');
+    const t = repo.openTrade()!;
+    expect(t.size_contracts).toBe(100);
+    expect(JSON.parse(t.entry_reason)).toMatchObject({ fixedContracts: 100, marginCapped: false });
+  });
+
+  it('fill away from the quoted price: SL and TP legs are moved by editing the orders (no bracket edit)', async () => {
+    const { fx, repo, exec } = makeEngine({ TP_R: 2 });
+    fx.price = 2000;
+    const orig = fx.placeOrder.bind(fx);
+    fx.placeOrder = async (req) => {
+      const o = await orig(req);
+      if (fx.position) fx.position.entryPrice = 2005; // filled $5 worse than the ticker the legs were priced from
+      return o;
+    };
+    expect(await exec.enter('buy', H - 3600, reason, R)).toBe('opened');
+    expect(fx.sl()!.stopPrice).toBe(1985);
+    expect(fx.tp()!.stopPrice).toBe(2045);
+    expect(fx.calls).toContain('editOrderStop');
+    expect(fx.calls).not.toContain('editBracket');
+    expect(repo.openTrade()!).toMatchObject({ sl_price: 1985, tp_price: 2045 });
+  });
+
   it('the margin cap binds when 20% risk needs more than 18× notional', async () => {
     const { fx, repo, exec } = makeEngine();
     fx.price = 2225; // base 264 > cap floor(300 × 20 × 0.9 / 22.25) = 242
@@ -287,6 +313,7 @@ describe('executor.trail (break-even and ATR trailing)', () => {
     fx.calls = [];
     await exec.trail({ close: 2012, atr: 5, candles: [bar(H, 2000, 2013, 1999, 2012)] });
     expect(fx.calls).not.toContain('editBracket');
+    expect(fx.calls).not.toContain('editOrderStop');
   });
 
   it('no change below the trigger → no PUT', async () => {
@@ -294,6 +321,7 @@ describe('executor.trail (break-even and ATR trailing)', () => {
     fx.calls = [];
     await exec.trail({ close: 2005, atr: 5, candles: win });
     expect(fx.calls).not.toContain('editBracket');
+    expect(fx.calls).not.toContain('editOrderStop');
   });
 
   it('never loosens: a lower candidate after a higher stop is ignored', async () => {
@@ -303,15 +331,49 @@ describe('executor.trail (break-even and ATR trailing)', () => {
     fx.calls = [];
     await exec.trail({ close: 2031, atr: 10, candles: win }); // 2035 − 30 = 2005 < 2020
     expect(fx.calls).not.toContain('editBracket');
+    expect(fx.calls).not.toContain('editOrderStop');
     expect(fx.sl()!.stopPrice).toBe(2020);
   });
 
-  it('PUT fails 3 times → old stop kept, alert', async () => {
+  it('Delta rejects the bracket edit ("id is required") → the stop is moved by editing the SL order itself', async () => {
+    const { fx, repo, exec } = await open();
+    const slId = fx.sl()!.id;
+    for (let i = 0; i < 3; i++) fx.fail('editBracket', new ExchangeError('id is required', 'fatal'));
+    fx.price = 2030;
+    await exec.trail({ close: 2030, atr: 5, candles: win });
+    expect(fx.sl()!).toMatchObject({ id: slId, stopPrice: 2020 });
+    expect(repo.openTrade()!).toMatchObject({ sl_price: 2020, stage: 2 });
+  });
+
+  it('order edit rejected → bracket edit is sent with the SL order id', async () => {
     const { fx, exec } = await open();
-    for (let i = 0; i < 3; i++) fx.fail('editBracket');
+    const slId = fx.sl()!.id;
+    const sent: Array<{ id?: string; stopLoss?: number }> = [];
+    const orig = fx.editBracket.bind(fx);
+    fx.editBracket = async (req) => {
+      sent.push(req);
+      return orig(req);
+    };
+    fx.fail('editOrderStop', new ExchangeError('rejected', 'fatal'));
+    fx.price = 2030;
+    await exec.trail({ close: 2030, atr: 5, candles: win });
+    expect(sent[0]).toMatchObject({ id: slId, stopLoss: 2020 });
+    expect(fx.sl()!.stopPrice).toBe(2020);
+  });
+
+  it('every edit and the place-new fallback fail → old stop kept, no sl_move recorded', async () => {
+    const { fx, repo, exec } = await open();
+    for (let i = 0; i < 3; i++) {
+      fx.fail('editOrderStop');
+      fx.fail('editBracket');
+    }
+    fx.placeBracketNoop = true;
     fx.price = 2030;
     await exec.trail({ close: 2030, atr: 5, candles: win });
     expect(fx.sl()!.stopPrice).toBe(1980);
+    const t = repo.openTrade()!;
+    expect(t).toMatchObject({ sl_price: 1980, stage: 0 });
+    expect(repo.listTradeEvents(t.id).some((e) => e.type === 'sl_move')).toBe(false);
   });
 
   it('breach → close(trail_breached)', async () => {

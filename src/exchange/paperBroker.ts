@@ -5,7 +5,8 @@
 import type { Params } from '../config/params.js';
 import type { Repo } from '../store/repo.js';
 import type { Candle, Side } from '../shared/types.js';
-import type { BracketReq, ExchangePort, Fill, MarginMode, Order, PlaceOrderReq, Position, Product, Ticker } from './types.js';
+import type { BracketReq, CandleResolution, ExchangePort, Fill, MarginMode, Order, PlaceOrderReq, Position, Product, Ticker } from './types.js';
+import { ExchangeError } from './types.js';
 
 interface PaperState {
   balance: number;
@@ -86,8 +87,8 @@ export class PaperBroker implements ExchangePort {
   }
 
   // ---- market data (pass-through) ----
-  getCandles(start: number, end: number): Promise<Candle[]> {
-    return this.market.getCandles(start, end);
+  getCandles(start: number, end: number, resolution?: CandleResolution): Promise<Candle[]> {
+    return this.market.getCandles(start, end, resolution);
   }
   getTicker(): Promise<Ticker> {
     return this.market.getTicker();
@@ -138,6 +139,13 @@ export class PaperBroker implements ExchangePort {
   async editBracket(req: BracketReq): Promise<void> {
     const s = this.load();
     this.setBracket(s, req);
+    this.save(s);
+  }
+  async editOrderStop(id: string, stopPrice: number): Promise<void> {
+    const s = this.load();
+    const o = s.orders.find((x) => x.id === id);
+    if (!o) throw new ExchangeError(`order ${id} not found`, 'fatal');
+    o.stopPrice = stopPrice;
     this.save(s);
   }
   async placeBracket(req: BracketReq): Promise<void> {

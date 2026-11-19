@@ -79,6 +79,11 @@ const MIGRATIONS: string[] = [
   // Trades still open from before the upgrade were opened with the $20 stop, so R = 20 for them.
   `ALTER TABLE trades ADD COLUMN risk_dist REAL;
    UPDATE trades SET risk_dist = 20 WHERE status IN ('OPENING', 'OPEN', 'CLOSING');`,
+  // 3: STRATEGY=revaa (design_draft.md, 2026-11-20) — 3-minute candles for AlgoAlpha. Ignored by every other strategy.
+  `CREATE TABLE IF NOT EXISTS candles_3m (
+    time INTEGER PRIMARY KEY,
+    open REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL, close REAL NOT NULL, volume REAL NOT NULL
+  );`,
 ];
 
 export function migrate(db: Database.Database): void {

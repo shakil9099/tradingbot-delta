@@ -23,6 +23,7 @@ async function main() {
     cycle: async () => void (await engine.cycle()),
     reconcile: async () => void (await engine.reconcile()),
     backup: () => backupNightly(repo.db, env.DATA_DIR),
+    cycleOffsetMs: env.CYCLE_OFFSET_SEC * 1000,
   });
   scheduler.start();
 

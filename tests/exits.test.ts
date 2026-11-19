@@ -72,3 +72,28 @@ describe('stageOf', () => {
     expect(stageOf('sell', E, 1997.5)).toBe(1);
   });
 });
+
+describe('break-even at +$15 (BE_TRIG_USD), whichever of $15 and 1R comes first', () => {
+  const live = { ...P, BE_TRIG_R: 1, BE_TRIG_USD: 15 };
+  const R40 = 40;
+  const long = (close: number) => ({ close, atr: 20, hh: close, ll: E });
+  const short = (close: number) => ({ close, atr: 20, hh: E, ll: close });
+
+  it('long, R $40: a close at +$14.95 does nothing, a close at +$15 moves the stop to entry + fees', () => {
+    expect(nextStop('buy', E, R40, 1960, 0, long(2014.95), live)).toEqual({ sl: 1960, stage: 0, changed: false });
+    expect(nextStop('buy', E, R40, 1960, 0, long(2015), live)).toEqual({ sl: 2002.5, stage: 1, changed: true });
+  });
+
+  it('short, R $40: a close at −$15 moves the stop to entry − fees', () => {
+    expect(nextStop('sell', E, R40, 2040, 0, short(1985), live)).toEqual({ sl: 1997.5, stage: 1, changed: true });
+  });
+
+  it('R $10: 1R comes first, so break-even at +$10', () => {
+    expect(nextStop('buy', E, 10, 1990, 0, long(2010), live)).toEqual({ sl: 2002.5, stage: 1, changed: true });
+  });
+
+  it('BE_TRIG_USD 0 turns the $15 rule off (1R only)', () => {
+    expect(nextStop('buy', E, R40, 1960, 0, long(2015), { ...live, BE_TRIG_USD: 0 }).changed).toBe(false);
+  });
+});
+

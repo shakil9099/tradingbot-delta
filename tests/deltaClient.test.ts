@@ -37,6 +37,20 @@ function client(responses: Resp[], extra: Partial<ConstructorParameters<typeof D
 }
 
 describe('DeltaClient', () => {
+  it('editOrderStop: PUT /v2/orders with the numeric order id and stop_price', async () => {
+    const { c, seen } = client([{ status: 200, body: { success: true, result: {} } }]);
+    await c.editOrderStop('12345', 1787.15);
+    expect(seen[0].url).toBe('https://api.india.delta.exchange/v2/orders');
+    expect(seen[0].init.method).toBe('PUT');
+    expect(JSON.parse(String(seen[0].init.body))).toEqual({ id: 12345, product_id: 3136, stop_price: '1787.15' });
+  });
+
+  it('editBracket sends the order id when given (Delta: "id is required")', async () => {
+    const { c, seen } = client([{ status: 200, body: { success: true, result: {} } }]);
+    await c.editBracket({ id: '12345', stopLoss: 1787.15 });
+    expect(JSON.parse(String(seen[0].init.body))).toMatchObject({ id: 12345, product_id: 3136, bracket_stop_loss_price: '1787.15' });
+  });
+
   it('sends api-key, timestamp, signature and User-Agent on authed calls', async () => {
     const { c, seen } = client([{ status: 200, body: { success: true, result: { size: 5, entry_price: '2000' } } }]);
     const pos = await c.getPosition();

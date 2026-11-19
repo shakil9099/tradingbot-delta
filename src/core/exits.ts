@@ -9,6 +9,7 @@ export interface ExitParams {
   SL_MIN: number;
   SL_MAX: number;
   BE_TRIG_R: number;
+  BE_TRIG_USD: number;
   TRAIL_TRIG_R: number;
   TRAIL_ATR_MULT: number;
   TP_R: number;
@@ -52,7 +53,7 @@ export interface BarState {
 }
 
 /**
- * Next stop on a candle close. Candidate = the tighter of break-even (profit ≥ BE_TRIG_R × R) and the
+ * Next stop on a candle close. Candidate = the tighter of break-even (profit ≥ BE_TRIG_R × R or ≥ BE_TRIG_USD) and the
  * trailing stop (profit ≥ TRAIL_TRIG_R × R: hh − TRAIL_ATR_MULT × atr, or ll + … for shorts). Rounded toward
  * profit; applied only if it is at least one tick tighter than the current stop and still on the right side
  * of the close. Never loosens.
@@ -72,7 +73,8 @@ export function nextStop(
   // A candidate is usable only if, after rounding, it is still strictly on the protective side of the close.
   const usable = (x: number) => Number.isFinite(x) && (long ? round(x) < m.close : round(x) > m.close);
   const cands: Array<{ price: number; stage: Stage }> = [];
-  if (p.BE_TRIG_R > 0 && profit >= p.BE_TRIG_R * R) {
+  const beHit = (p.BE_TRIG_R > 0 && profit >= p.BE_TRIG_R * R) || (p.BE_TRIG_USD > 0 && profit >= p.BE_TRIG_USD);
+  if (beHit) {
     const lock = feeLock(entry, p);
     cands.push({ price: long ? entry + lock : entry - lock, stage: 1 });
   }

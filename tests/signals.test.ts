@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAll, direction, hullSignals, utSignals } from '../src/core/signals.js';
+import { computeAll, direction, hullSignals, hullWithRevReentry, signalsFor, utSignals } from '../src/core/signals.js';
 import { P, candlesFromCloses } from './helpers.js';
 
 describe('hullSignals', () => {
@@ -52,5 +52,38 @@ describe('computeAll', () => {
     expect(direction('hull', out, t)).toBe(out.hullUp[t] ? 'up' : 'down');
     expect(direction('ut', out, t)).toBe(out.utUp[t] ? 'up' : 'down');
     expect(direction('hull', out, 10_000)).toBeNull();
+  });
+});
+
+describe('Mix B: hullWithRevReentry (REV_REENTRY)', () => {
+  //            0    1  2  3  4  5
+  const hull = [1, 2, 3, 4, 3, 2];
+  const hullUp = hull.map((h, t) => t >= 2 && h > hull[t - 2]); // t2,t3 up; t4,t5 down
+  it('agreeing reversal passes, opposing is dropped, a Hull flip wins a same-bar tie, no direction before t2', () => {
+    const sigHull = ['NONE', 'NONE', 'NONE', 'NONE', 'SHORT', 'NONE'] as const;
+    const sigRev = ['NONE', 'LONG', 'LONG', 'SHORT', 'LONG', 'SHORT'] as const;
+    expect(hullWithRevReentry([...sigHull], [...sigRev], hull, hullUp)).toEqual(['NONE', 'NONE', 'LONG', 'NONE', 'SHORT', 'SHORT']);
+  });
+  it('a NaN Hull value gives NONE', () => {
+    const h = [1, 2, NaN, 4, 3, 2];
+    expect(hullWithRevReentry(Array(6).fill('NONE'), Array(6).fill('LONG'), h, h.map(() => true))[2]).toBe('NONE');
+    expect(hullWithRevReentry(Array(6).fill('NONE'), Array(6).fill('LONG'), h, h.map(() => true))[4]).toBe('NONE'); // h[2] NaN
+  });
+
+  const n = 2600;
+  const closes = Array.from({ length: n }, (_, i) => 2000 + 80 * Math.sin(i / 31) + 30 * Math.sin(i / 9));
+  const c = closes.map((x, i) => {
+    const o = i ? closes[i - 1] : x;
+    return { time: 1_700_000_000 + 3600 * i, open: o, high: Math.max(o, x) + 3, low: Math.min(o, x) - 3, close: x, volume: 1 };
+  });
+  it('computeAll: off → sigHullEntry is sigHull; on → Hull flips plus agreeing reversal signals; signalsFor(hull) uses it', () => {
+    const off = computeAll(c, P);
+    expect(off.sigHullEntry).toEqual(off.sigHull);
+    const on = computeAll(c, { ...P, REV_REENTRY: true });
+    expect(on.sigHullEntry).toEqual(hullWithRevReentry(on.sigHull, on.sigRev, on.hull, on.hullUp));
+    expect(signalsFor('hull', on)).toBe(on.sigHullEntry);
+    const extra = on.sigHullEntry.filter((s, t) => s !== 'NONE' && on.sigHull[t] === 'NONE').length;
+    expect(extra).toBeGreaterThan(0);
+    on.sigHull.forEach((s, t) => s !== 'NONE' && expect(on.sigHullEntry[t]).toBe(s));
   });
 });

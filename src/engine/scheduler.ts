@@ -3,10 +3,10 @@ import { log } from '../log.js';
 const BASE_RECONCILE_MS = 60_000;
 const MAX_RECONCILE_MS = 300_000;
 
-/** Next HH:00:10 UTC strictly after `now` (ms). */
-export function nextCycleAt(now: number): number {
+/** Next HH:00:10 UTC (or HH:00 + offsetMs) strictly after `now` (ms). */
+export function nextCycleAt(now: number, offsetMs = 10_000): number {
   const hour = 3_600_000;
-  const t = Math.floor(now / hour) * hour + 10_000;
+  const t = Math.floor(now / hour) * hour + offsetMs;
   return t > now ? t : t + hour;
 }
 
@@ -21,6 +21,8 @@ export interface SchedulerDeps {
   cycle: () => Promise<void>;
   reconcile: () => Promise<void>;
   backup: () => Promise<unknown>;
+  /** Cycle start after the hour, ms (default 10 s; a second instance uses a later slot). */
+  cycleOffsetMs?: number;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
@@ -78,7 +80,7 @@ export class Scheduler {
   }
 
   private armCycle(): void {
-    this.nextRunAt = nextCycleAt(this.now());
+    this.nextRunAt = nextCycleAt(this.now(), this.d.cycleOffsetMs);
     this.arm(this.d.cycle, this.nextRunAt, () => this.armCycle());
   }
   private armReconcile(): void {

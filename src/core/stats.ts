@@ -39,7 +39,7 @@ export function computeStats(trades: readonly TradeRow[]): StatsResponse {
   let equity = 0;
   return {
     total: summarize(nets),
-    byStrategy: { hull: by('hull'), ut: by('ut'), unknown: by('unknown') },
+    byStrategy: { hull: by('hull'), ut: by('ut'), reversal: by('reversal'), revaa: by('revaa'), unknown: by('unknown') },
     feesPaid: closed.reduce((s, t) => s + (t.fees ?? 0), 0),
     maxDrawdown: maxDrawdown(nets),
     equity: closed.map((t) => {

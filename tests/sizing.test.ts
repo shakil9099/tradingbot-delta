@@ -44,3 +44,19 @@ describe('riskFor (throttle)', () => {
     expect(riskFor(79.99, 100, P)).toMatchObject({ risk: 0.05, reduced: true });
   });
 });
+
+describe('fixed size (FIXED_CONTRACTS)', () => {
+  const base = { balanceUsd: 106.67, price: 1789.4, riskDist: 31.45, risk: 0.05, leverage: 20, maxContracts: 100, feeRate: 0.00059, tick: 0.05, slippageTicks: 1 };
+  it('uses the fixed size instead of risk sizing', () => {
+    expect(contractsFor(base).contracts).toBe(15); // 5% risk → 15 ct
+    const r = contractsFor({ ...base, fixedContracts: 100 });
+    expect(r.contracts).toBe(100);
+    expect(r.riskUsd).toBeCloseTo(100 * 0.01 * (31.45 + 1789.4 * 2 * 0.00059 + 0.1), 2);
+  });
+  it('margin still caps it: $80 at 20x covers 80 contracts at $1789', () => {
+    expect(contractsFor({ ...base, balanceUsd: 80, fixedContracts: 100 }).contracts).toBe(80);
+  });
+  it('MAX_CONTRACTS still caps it', () => {
+    expect(contractsFor({ ...base, maxContracts: 50, fixedContracts: 100 }).contracts).toBe(50);
+  });
+});

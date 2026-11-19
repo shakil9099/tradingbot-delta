@@ -116,6 +116,7 @@ export function settingsRouter(d: SettingsDeps): Router {
         halted: engine.c.halt.state().halted,
         risk: engine.c.params.RISK_PER_TRADE,
         riskReduced: engine.c.params.RISK_REDUCED,
+        fixedContracts: engine.c.params.FIXED_CONTRACTS,
       });
     }),
   );

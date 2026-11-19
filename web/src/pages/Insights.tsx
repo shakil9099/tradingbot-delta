@@ -59,6 +59,8 @@ export default function Insights() {
                 <Row name="All" s={st.data.total} />
                 <Row name="Hull" s={st.data.byStrategy.hull} />
                 <Row name="UT Bot" s={st.data.byStrategy.ut} />
+                {st.data.byStrategy.reversal.count > 0 && <Row name="Reversal" s={st.data.byStrategy.reversal} />}
+                {st.data.byStrategy.revaa?.count > 0 && <Row name="Reversal → AlgoAlpha" s={st.data.byStrategy.revaa} />}
                 {st.data.byStrategy.unknown.count > 0 && <Row name="Adopted" s={st.data.byStrategy.unknown} />}
               </tbody>
             </table>

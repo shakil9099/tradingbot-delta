@@ -52,6 +52,15 @@ describe('select', () => {
     expect(select({ ...base, active: 'ut', override: 'ut' }, P)).toMatchObject({ active: 'ut', switched: false });
   });
 
+  it('override reversal makes reversal active', () => {
+    expect(select({ ...base, override: 'reversal' }, P)).toMatchObject({ active: 'reversal', switched: true });
+    expect(select({ ...base, active: 'reversal', override: 'reversal' }, P)).toMatchObject({ active: 'reversal', switched: false });
+  });
+
+  it('back to adaptive from reversal: cold start on hull instead of keeping reversal forever', () => {
+    expect(select({ ...base, active: 'reversal', scores: { hull: 0, ut: 100 } }, P)).toMatchObject({ active: 'hull', switched: true, pending: null });
+  });
+
   it('has no side effects on its input', () => {
     const input = structuredClone({ ...base, scores: { hull: 0, ut: 50 } });
     const copy = structuredClone(input);

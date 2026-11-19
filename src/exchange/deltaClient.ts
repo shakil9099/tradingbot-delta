@@ -7,6 +7,7 @@ import type { Candle, Side } from '../shared/types.js';
 import {
   ExchangeError,
   type BracketReq,
+  type CandleResolution,
   type ExchangePort,
   type Fill,
   type MarginMode,
@@ -183,9 +184,9 @@ export class DeltaClient implements ExchangePort {
     return skew;
   }
 
-  async getCandles(start: number, end: number): Promise<Candle[]> {
+  async getCandles(start: number, end: number, resolution: CandleResolution = '1h'): Promise<Candle[]> {
     const rows = await this.result<Array<Record<string, unknown>>>('GET', '/v2/history/candles', {
-      query: { resolution: '1h', symbol: this.o.symbol, start, end },
+      query: { resolution, symbol: this.o.symbol, start, end },
     });
     return rows.map((r) => ({ time: num(r.time), open: num(r.open), high: num(r.high), low: num(r.low), close: num(r.close), volume: num(r.volume, 0) }));
   }
@@ -255,9 +256,15 @@ export class DeltaClient implements ExchangePort {
 
   async editBracket(req: BracketReq): Promise<void> {
     const body: Record<string, unknown> = { product_id: this.o.productId, bracket_stop_trigger_method: 'last_traded_price' };
+    if (req.id !== undefined) body.id = Number(req.id);
     if (req.stopLoss !== undefined) body.bracket_stop_loss_price = String(req.stopLoss);
     if (req.takeProfit !== undefined) body.bracket_take_profit_price = String(req.takeProfit);
     await this.result('PUT', '/v2/orders/bracket', { body, auth: true, retry: false });
+  }
+
+  /** PUT /v2/orders (edit order): new stop_price for an open stop order. */
+  async editOrderStop(id: string, stopPrice: number): Promise<void> {
+    await this.result('PUT', '/v2/orders', { body: { id: Number(id), product_id: this.o.productId, stop_price: String(stopPrice) }, auth: true, retry: false });
   }
 
   async placeBracket(req: BracketReq): Promise<void> {

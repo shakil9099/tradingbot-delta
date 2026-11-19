@@ -8,7 +8,7 @@ import { brackets, floorHour, opposite, type Ctx } from '../engine/context.js';
 import { classifyExchangeClose, settle } from '../engine/settle.js';
 import { alert, log } from '../log.js';
 import type { Candle, ExitReason, Side, Stage, StrategyId, TradeRow } from '../shared/types.js';
-import { ExchangeError, type Position } from './types.js';
+import { ExchangeError, type BracketReq, type Order, type Position } from './types.js';
 
 export type EnterResult = 'opened' | 'skipped' | 'failed';
 export type CloseResult = 'closed' | 'flat' | 'failed';
@@ -37,6 +37,7 @@ const REASON_CODE: Record<ExitReason, string> = {
   sl_stage_2: 's2',
   tp: 'tp',
   reversal: 'rv',
+  aa_break: 'ab',
   manual: 'mn',
   trail_breached: 'tb',
   margin_mode: 'mm',
@@ -132,6 +133,7 @@ export class Executor {
       tick: p.TICK,
       slippageTicks: p.SLIPPAGE_TICKS,
       contractValue: p.CONTRACT_VALUE,
+      fixedContracts: p.FIXED_CONTRACTS,
     });
     if (!size.contracts) {
       log.warn({ balance, price: ticker.close, R, risk: th.risk }, 'SIZE_TOO_SMALL');
@@ -145,6 +147,7 @@ export class Executor {
       peak: +th.peak.toFixed(2),
       riskUsd: +size.riskUsd.toFixed(2),
       marginCapped: size.contracts < size.base,
+      fixedContracts: p.FIXED_CONTRACTS || undefined,
     };
 
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -205,11 +208,14 @@ export class Executor {
     const br = initialStops(side, pos.entryPrice, R, p);
     repo.updateTrade(id, { size_contracts: pos.size, entry_price: pos.entryPrice, entry_time: entryTime, sl_price: br.sl, tp_price: br.tp });
 
-    // Move the bracket to exactly entry ∓ R (and ± TP when TP_R > 0).
+    // Move the legs placed with the order (priced from the ticker) to exactly entry ∓ R (and ± TP when TP_R > 0).
     try {
-      await port.editBracket({ stopLoss: br.sl, takeProfit: br.tp ?? undefined });
+      const legs = brackets(await port.getOpenOrders());
+      const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) <= p.TICK / 2;
+      if (legs.sl && !near(legs.sl.stopPrice, br.sl)) await this.editLeg(legs.sl, { stopLoss: br.sl, takeProfit: br.tp ?? undefined });
+      if (legs.tp && br.tp !== null && !near(legs.tp.stopPrice, br.tp)) await this.editLeg(legs.tp, { takeProfit: br.tp });
     } catch (e) {
-      log.warn({ err: e }, 'editBracket after fill failed; will verify and re-attach');
+      log.warn({ err: e }, 'reading the bracket after fill failed; will verify and re-attach');
     }
     const ok = await this.ensureBracket(id, br.sl, br.tp);
     if (!ok) {
@@ -233,6 +239,29 @@ export class Executor {
 
     await this.checkMarginAfterFill(id);
     return 'opened';
+  }
+
+  /**
+   * Moves one bracket leg to a new trigger price. First edits the order itself by id (PUT /v2/orders); if Delta
+   * rejects that, edits the bracket with the order id (PUT /v2/orders/bracket). Errors are logged, not thrown:
+   * the caller reads the orders back to confirm.
+   */
+  private async editLeg(leg: Order, req: BracketReq): Promise<boolean> {
+    const price = req.stopLoss ?? req.takeProfit;
+    if (price === undefined) return false;
+    try {
+      await this.c.port.editOrderStop(leg.id, price);
+      return true;
+    } catch (e) {
+      log.warn({ err: e, orderId: leg.id, price }, 'edit order failed; trying edit bracket');
+    }
+    try {
+      await this.c.port.editBracket({ ...req, id: leg.id });
+      return true;
+    } catch (e) {
+      log.warn({ err: e, orderId: leg.id, price }, 'edit bracket failed');
+    }
+    return false;
   }
 
   /** Confirms the SL (and the TP when tp is not null) exist near the expected prices; attaches missing legs once. */
@@ -341,8 +370,8 @@ export class Executor {
     return true;
   }
 
-  async reverse(newSide: Side, candleTime: number, reason: EntryReason, R: number): Promise<void> {
-    const r = await this.close('reversal', candleTime);
+  async reverse(newSide: Side, candleTime: number, reason: EntryReason, R: number, closeReason: ExitReason = 'reversal'): Promise<void> {
+    const r = await this.close(closeReason, candleTime);
     if (r === 'failed') return;
     if (this.c.halt.state().halted) return;
     await this.enter(newSide, candleTime, reason, R);
@@ -402,20 +431,16 @@ export class Executor {
       return;
     }
 
-    // 3. PUT with up to 3 retries; on failure keep the old stop, alert, return.
+    // 3. Edit the SL in place (order edit, then bracket edit with the order id), up to 3 rounds. On failure fall
+    //    through: step 4 reads back and tries place-new-then-cancel-old before giving up.
+    const slOrder = before.sl!;
     let ok = false;
     for (let i = 0; i < 3 && !ok; i++) {
-      try {
-        await port.editBracket({ stopLoss: next.sl, takeProfit: trade.tp_price ?? undefined });
-        ok = true;
-      } catch (e) {
-        log.warn({ err: e, attempt: i + 1 }, 'trail PUT failed');
+      ok = await this.editLeg(slOrder, { stopLoss: next.sl, takeProfit: trade.tp_price ?? undefined });
+      if (!ok) {
+        log.warn({ attempt: i + 1 }, 'trail: stop edit failed');
         await this.c.sleep(500);
       }
-    }
-    if (!ok) {
-      alert(`trail: PUT failed 3 times; old stop ${currentSl} kept`);
-      return;
     }
 
     // 4–5. Read back; if not moved, place the new SL first, confirm, then cancel the old one.
@@ -431,7 +456,7 @@ export class Executor {
       const again = brackets(await port.getOpenOrders());
       const fresh = again.sls.find((o) => near(o.stopPrice));
       if (!fresh) {
-        alert(`trail: could not confirm new stop ${next.sl}; old stop kept`);
+        alert(`trail: stop NOT moved on Delta (still ${currentSl}, wanted ${next.sl}). Move it by hand.`, { tradeId: trade.id });
         return;
       }
       newId = fresh.id;

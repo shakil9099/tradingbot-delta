@@ -89,7 +89,7 @@ export function buildRouter(d: RouteDeps): Router {
           const pk = repo.kvGet(peakKey(params.DRY_RUN));
           const bal = snap.balance;
           const r = bal === null ? null : riskFor(bal, pk === null ? null : Number(pk), params);
-          return { perTrade: params.RISK_PER_TRADE, reduced: params.RISK_REDUCED, reduceBelowPeak: params.RISK_REDUCE_DD, peak: pk === null ? null : Number(pk), drawdown: r ? +r.drawdown.toFixed(4) : null, current: r ? r.risk : null };
+          return { fixedContracts: params.FIXED_CONTRACTS, perTrade: params.RISK_PER_TRADE, reduced: params.RISK_REDUCED, reduceBelowPeak: params.RISK_REDUCE_DD, peak: pk === null ? null : Number(pk), drawdown: r ? +r.drawdown.toFixed(4) : null, current: r ? r.risk : null };
         })(),
       };
       res.json({ ...body, strategyMode: params.STRATEGY, atrGateMax: params.ATR_GATE_MAX, minAtr: params.MIN_ATR, skipWeekendEntries: params.SKIP_WEEKEND_ENTRIES, snapshotAt: snap.at, health: healthStatus(d) });
